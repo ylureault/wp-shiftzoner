@@ -15,9 +15,18 @@
     <nav class="main-nav">
         <div class="nav-container">
             <div class="logo">
-                <a href="<?php echo esc_url( home_url( '/' ) ); ?>">
-                    SHIFTZONER
-                </a>
+                <?php
+                if ( has_custom_logo() ) {
+                    the_custom_logo();
+                } else {
+                    ?>
+                    <a href="<?php echo esc_url( home_url( '/' ) ); ?>" class="logo-text">
+                        <span class="screen-reader-text"><?php bloginfo( 'name' ); ?></span>
+                        SHIFTZONER
+                    </a>
+                    <?php
+                }
+                ?>
             </div>
 
             <ul class="nav-links">
@@ -92,7 +101,23 @@
     gap: 2rem;
 }
 
-.logo a {
+.logo .custom-logo-link {
+    display: inline-block;
+    line-height: 0;
+    transition: transform 0.3s ease;
+}
+
+.logo .custom-logo-link:hover {
+    transform: scale(1.05);
+}
+
+.logo .custom-logo {
+    max-height: 60px;
+    width: auto;
+    display: block;
+}
+
+.logo .logo-text {
     font-size: 2rem;
     font-weight: 900;
     background: linear-gradient(135deg, var(--primary), var(--secondary));
@@ -104,8 +129,14 @@
     display: inline-block;
 }
 
-.logo a:hover {
+.logo .logo-text:hover {
     transform: scale(1.05);
+}
+
+.logo .screen-reader-text {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
 }
 
 .nav-links {

@@ -32,8 +32,8 @@ $community_photos = new WP_Query( array(
 <section class="hero" id="accueil">
     <div class="hero-content">
         <div class="hero-text">
-            <h1>Partagez Votre Passion Automobile</h1>
-            <p>Rejoignez la communauté ShiftZoneR. Partagez vos plus beaux clichés automobiles, découvrez des passionnés et échangez autour de votre passion.</p>
+            <h1><?php echo esc_html( get_theme_mod( 'shiftzoner_hero_title', 'Partagez Votre Passion Automobile' ) ); ?></h1>
+            <p><?php echo esc_html( get_theme_mod( 'shiftzoner_hero_subtitle', 'Rejoignez la communauté ShiftZoneR. Partagez vos plus beaux clichés automobiles, découvrez des passionnés et échangez autour de votre passion.' ) ); ?></p>
             <div class="hero-buttons">
                 <?php if ( is_user_logged_in() ) : ?>
                     <a href="<?php echo esc_url( home_url( '/soumettre-photo/' ) ); ?>" class="cta-button">Publier une photo</a>
@@ -68,11 +68,81 @@ $community_photos = new WP_Query( array(
     </div>
 </section>
 
+<!-- Section Dernières Photos -->
+<section class="latest-photos-section section-spacing" id="dernieres">
+    <div class="container">
+        <h2 class="section-title fade-in">Dernières Photos</h2>
+        <p class="section-subtitle fade-in">Découvrez les toutes dernières photos partagées par la communauté</p>
+
+        <?php
+        $latest_photos = new WP_Query( array(
+            'post_type'      => 'car_photo',
+            'posts_per_page' => 12,
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+            'post_status'    => 'publish',
+        ) );
+
+        if ( $latest_photos->have_posts() ) : ?>
+            <div class="gallery-grid">
+                <?php
+                while ( $latest_photos->have_posts() ) :
+                    $latest_photos->the_post();
+                    $brands = wp_get_post_terms( get_the_ID(), 'car_brand' );
+                    $models = wp_get_post_terms( get_the_ID(), 'car_model' );
+                    $votes = (int) get_post_meta( get_the_ID(), '_szr_vote_score', true );
+                    $comments_count = get_comments_number();
+                    $author_id = get_the_author_meta( 'ID' );
+                    $user_color = get_user_meta( $author_id, '_szr_user_color', true );
+                    ?>
+                    <div class="gallery-item fade-in">
+                        <a href="<?php the_permalink(); ?>">
+                            <?php if ( has_post_thumbnail() ) : ?>
+                                <?php the_post_thumbnail( 'large' ); ?>
+                            <?php endif; ?>
+                            <div class="gallery-overlay">
+                                <div class="gallery-info">
+                                    <div class="author-info">
+                                        <span class="author-badge" style="background: <?php echo esc_attr( $user_color ? $user_color : '#888888' ); ?>"></span>
+                                        <span><?php the_author(); ?></span>
+                                    </div>
+                                    <h4>
+                                        <?php
+                                        if ( ! empty( $brands ) && ! empty( $models ) ) {
+                                            echo esc_html( $brands[0]->name . ' ' . $models[0]->name );
+                                        } else {
+                                            the_title();
+                                        }
+                                        ?>
+                                    </h4>
+                                    <div class="gallery-stats">
+                                        <span>❤️ <?php echo $votes; ?></span>
+                                        <span>💬 <?php echo $comments_count; ?></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    <?php
+                endwhile;
+                wp_reset_postdata();
+                ?>
+            </div>
+        <?php else : ?>
+            <p class="no-content">Aucune photo disponible pour le moment.</p>
+        <?php endif; ?>
+
+        <div class="section-cta">
+            <a href="<?php echo esc_url( home_url( '/galerie/' ) ); ?>" class="secondary-button">Voir toutes les photos</a>
+        </div>
+    </div>
+</section>
+
 <!-- Section Photos de Rafael -->
 <section class="rafael-section section-spacing" id="rafael">
     <div class="container">
-        <h2 class="section-title fade-in">Photos de Rafael</h2>
-        <p class="section-subtitle fade-in">Découvrez les photos exclusives du créateur de ShiftZoneR</p>
+        <h2 class="section-title fade-in"><?php echo esc_html( get_theme_mod( 'shiftzoner_rafael_title', 'Photos de Rafael' ) ); ?></h2>
+        <p class="section-subtitle fade-in"><?php echo esc_html( get_theme_mod( 'shiftzoner_rafael_subtitle', 'Découvrez les photos exclusives du créateur de ShiftZoneR' ) ); ?></p>
 
         <?php if ( $rafael_photos->have_posts() ) : ?>
             <div class="gallery-grid">
@@ -126,8 +196,8 @@ $community_photos = new WP_Query( array(
 <!-- Section Communauté -->
 <section class="community-section section-spacing" id="communaute">
     <div class="container">
-        <h2 class="section-title fade-in">La Communauté ShiftZoneR</h2>
-        <p class="section-subtitle fade-in">Les plus belles photos partagées par notre communauté de passionnés</p>
+        <h2 class="section-title fade-in"><?php echo esc_html( get_theme_mod( 'shiftzoner_community_title', 'La Communauté ShiftZoneR' ) ); ?></h2>
+        <p class="section-subtitle fade-in"><?php echo esc_html( get_theme_mod( 'shiftzoner_community_subtitle', 'Les plus belles photos partagées par notre communauté de passionnés' ) ); ?></p>
 
         <?php if ( $community_photos->have_posts() ) : ?>
             <div class="gallery-grid">
@@ -227,8 +297,8 @@ $community_photos = new WP_Query( array(
 <!-- CTA Section -->
 <section class="cta-section" id="rejoindre">
     <div class="cta-content">
-        <h2 class="fade-in">Prêt À Rejoindre La Communauté ?</h2>
-        <p class="fade-in">Créez votre compte gratuitement et commencez à partager vos plus belles créations dès aujourd'hui.</p>
+        <h2 class="fade-in"><?php echo esc_html( get_theme_mod( 'shiftzoner_cta_title', 'Prêt À Rejoindre La Communauté ?' ) ); ?></h2>
+        <p class="fade-in"><?php echo esc_html( get_theme_mod( 'shiftzoner_cta_subtitle', 'Créez votre compte gratuitement et commencez à partager vos plus belles créations dès aujourd\'hui.' ) ); ?></p>
         <?php if ( is_user_logged_in() ) : ?>
             <a href="<?php echo esc_url( home_url( '/soumettre-photo/' ) ); ?>" class="cta-button">Publier une photo</a>
         <?php else : ?>
@@ -381,6 +451,10 @@ $community_photos = new WP_Query( array(
 /* Sections */
 .section-spacing {
     padding: 6rem 2rem;
+}
+
+.latest-photos-section {
+    background: var(--dark);
 }
 
 .rafael-section {

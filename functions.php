@@ -1928,3 +1928,598 @@ function fix_upload_permissions() {
 }
 add_action('admin_init', 'fix_upload_permissions');
 add_action('wp_loaded', 'fix_upload_permissions');
+
+/**
+ * ===============================================
+ * SHIFTZONER - FONCTIONNALITÉS AVANCÉES
+ * ===============================================
+ */
+
+/**
+ * Support du logo personnalisé
+ */
+function shiftzoner_theme_setup() {
+    // Support du logo
+    add_theme_support('custom-logo', array(
+        'height'      => 100,
+        'width'       => 400,
+        'flex-height' => true,
+        'flex-width'  => true,
+        'header-text' => array('site-title', 'site-description'),
+    ));
+
+    // Support des images mises en avant
+    add_theme_support('post-thumbnails');
+    set_post_thumbnail_size(1200, 800, true);
+    add_image_size('shiftzoner-large', 1920, 1080, true);
+    add_image_size('shiftzoner-medium', 800, 600, true);
+    add_image_size('shiftzoner-thumb', 400, 300, true);
+
+    // Support du titre automatique
+    add_theme_support('title-tag');
+
+    // Support HTML5
+    add_theme_support('html5', array(
+        'search-form',
+        'comment-form',
+        'comment-list',
+        'gallery',
+        'caption',
+        'style',
+        'script',
+    ));
+
+    // Support des liens RSS automatiques
+    add_theme_support('automatic-feed-links');
+
+    // Support de la couleur d'arrière-plan
+    add_theme_support('custom-background');
+
+    // Enregistrer les menus
+    register_nav_menus(array(
+        'primary' => __('Menu Principal', 'shiftzoner'),
+        'footer'  => __('Menu Footer', 'shiftzoner'),
+    ));
+}
+add_action('after_setup_theme', 'shiftzoner_theme_setup');
+
+/**
+ * Customizer - Options pour personnaliser les textes
+ */
+function shiftzoner_customize_register($wp_customize) {
+    // Section Page d'accueil
+    $wp_customize->add_section('shiftzoner_homepage', array(
+        'title'    => __('Page d\'accueil ShiftZoneR', 'shiftzoner'),
+        'priority' => 30,
+    ));
+
+    // Hero Title
+    $wp_customize->add_setting('shiftzoner_hero_title', array(
+        'default'           => 'Partagez Votre Passion Automobile',
+        'sanitize_callback' => 'sanitize_text_field',
+        'transport'         => 'postMessage',
+    ));
+    $wp_customize->add_control('shiftzoner_hero_title', array(
+        'label'   => __('Titre Hero', 'shiftzoner'),
+        'section' => 'shiftzoner_homepage',
+        'type'    => 'text',
+    ));
+
+    // Hero Subtitle
+    $wp_customize->add_setting('shiftzoner_hero_subtitle', array(
+        'default'           => 'Rejoignez la communauté ShiftZoneR. Partagez vos plus beaux clichés automobiles, découvrez des passionnés et échangez autour de votre passion.',
+        'sanitize_callback' => 'sanitize_textarea_field',
+        'transport'         => 'postMessage',
+    ));
+    $wp_customize->add_control('shiftzoner_hero_subtitle', array(
+        'label'   => __('Sous-titre Hero', 'shiftzoner'),
+        'section' => 'shiftzoner_homepage',
+        'type'    => 'textarea',
+    ));
+
+    // Section Rafael Title
+    $wp_customize->add_setting('shiftzoner_rafael_title', array(
+        'default'           => 'Photos de Rafael',
+        'sanitize_callback' => 'sanitize_text_field',
+        'transport'         => 'postMessage',
+    ));
+    $wp_customize->add_control('shiftzoner_rafael_title', array(
+        'label'   => __('Titre Section Rafael', 'shiftzoner'),
+        'section' => 'shiftzoner_homepage',
+        'type'    => 'text',
+    ));
+
+    // Section Rafael Subtitle
+    $wp_customize->add_setting('shiftzoner_rafael_subtitle', array(
+        'default'           => 'Découvrez les photos exclusives du créateur de ShiftZoneR',
+        'sanitize_callback' => 'sanitize_textarea_field',
+        'transport'         => 'postMessage',
+    ));
+    $wp_customize->add_control('shiftzoner_rafael_subtitle', array(
+        'label'   => __('Sous-titre Section Rafael', 'shiftzoner'),
+        'section' => 'shiftzoner_homepage',
+        'type'    => 'textarea',
+    ));
+
+    // Section Community Title
+    $wp_customize->add_setting('shiftzoner_community_title', array(
+        'default'           => 'La Communauté ShiftZoneR',
+        'sanitize_callback' => 'sanitize_text_field',
+        'transport'         => 'postMessage',
+    ));
+    $wp_customize->add_control('shiftzoner_community_title', array(
+        'label'   => __('Titre Section Communauté', 'shiftzoner'),
+        'section' => 'shiftzoner_homepage',
+        'type'    => 'text',
+    ));
+
+    // Section Community Subtitle
+    $wp_customize->add_setting('shiftzoner_community_subtitle', array(
+        'default'           => 'Les plus belles photos partagées par notre communauté de passionnés',
+        'sanitize_callback' => 'sanitize_textarea_field',
+        'transport'         => 'postMessage',
+    ));
+    $wp_customize->add_control('shiftzoner_community_subtitle', array(
+        'label'   => __('Sous-titre Section Communauté', 'shiftzoner'),
+        'section' => 'shiftzoner_homepage',
+        'type'    => 'textarea',
+    ));
+
+    // CTA Title
+    $wp_customize->add_setting('shiftzoner_cta_title', array(
+        'default'           => 'Prêt À Rejoindre La Communauté ?',
+        'sanitize_callback' => 'sanitize_text_field',
+        'transport'         => 'postMessage',
+    ));
+    $wp_customize->add_control('shiftzoner_cta_title', array(
+        'label'   => __('Titre CTA', 'shiftzoner'),
+        'section' => 'shiftzoner_homepage',
+        'type'    => 'text',
+    ));
+
+    // CTA Subtitle
+    $wp_customize->add_setting('shiftzoner_cta_subtitle', array(
+        'default'           => 'Créez votre compte gratuitement et commencez à partager vos plus belles créations dès aujourd\'hui.',
+        'sanitize_callback' => 'sanitize_textarea_field',
+        'transport'         => 'postMessage',
+    ));
+    $wp_customize->add_control('shiftzoner_cta_subtitle', array(
+        'label'   => __('Sous-titre CTA', 'shiftzoner'),
+        'section' => 'shiftzoner_homepage',
+        'type'    => 'textarea',
+    ));
+
+    // Section Réseaux sociaux
+    $wp_customize->add_section('shiftzoner_social', array(
+        'title'    => __('Réseaux Sociaux', 'shiftzoner'),
+        'priority' => 31,
+    ));
+
+    $wp_customize->add_setting('shiftzoner_instagram', array(
+        'default'           => '',
+        'sanitize_callback' => 'esc_url_raw',
+    ));
+    $wp_customize->add_control('shiftzoner_instagram', array(
+        'label'   => __('Instagram URL', 'shiftzoner'),
+        'section' => 'shiftzoner_social',
+        'type'    => 'url',
+    ));
+
+    $wp_customize->add_setting('shiftzoner_facebook', array(
+        'default'           => '',
+        'sanitize_callback' => 'esc_url_raw',
+    ));
+    $wp_customize->add_control('shiftzoner_facebook', array(
+        'label'   => __('Facebook URL', 'shiftzoner'),
+        'section' => 'shiftzoner_social',
+        'type'    => 'url',
+    ));
+
+    $wp_customize->add_setting('shiftzoner_twitter', array(
+        'default'           => '',
+        'sanitize_callback' => 'esc_url_raw',
+    ));
+    $wp_customize->add_control('shiftzoner_twitter', array(
+        'label'   => __('Twitter/X URL', 'shiftzoner'),
+        'section' => 'shiftzoner_social',
+        'type'    => 'url',
+    ));
+}
+add_action('customize_register', 'shiftzoner_customize_register');
+
+/**
+ * SEO - Meta Tags et Open Graph
+ */
+function shiftzoner_add_seo_meta() {
+    if (is_singular('car_photo')) {
+        global $post;
+
+        $title = get_the_title();
+        $description = wp_trim_words(get_the_excerpt(), 30);
+        $image = get_the_post_thumbnail_url($post->ID, 'full');
+        $url = get_permalink();
+
+        // Get car info
+        $brands = wp_get_post_terms($post->ID, 'car_brand');
+        $models = wp_get_post_terms($post->ID, 'car_model');
+        $years = wp_get_post_terms($post->ID, 'car_year');
+
+        $car_info = '';
+        if (!empty($brands)) $car_info .= $brands[0]->name . ' ';
+        if (!empty($models)) $car_info .= $models[0]->name . ' ';
+        if (!empty($years)) $car_info .= $years[0]->name;
+
+        if ($car_info) {
+            $title = $car_info . ' - ' . get_bloginfo('name');
+        }
+
+        echo '<meta name="description" content="' . esc_attr($description) . '">' . "\n";
+        echo '<meta name="keywords" content="' . esc_attr($car_info . ', photo automobile, voiture') . '">' . "\n";
+
+        // Open Graph
+        echo '<meta property="og:type" content="article">' . "\n";
+        echo '<meta property="og:title" content="' . esc_attr($title) . '">' . "\n";
+        echo '<meta property="og:description" content="' . esc_attr($description) . '">' . "\n";
+        echo '<meta property="og:url" content="' . esc_url($url) . '">' . "\n";
+        if ($image) {
+            echo '<meta property="og:image" content="' . esc_url($image) . '">' . "\n";
+            echo '<meta property="og:image:width" content="1200">' . "\n";
+            echo '<meta property="og:image:height" content="630">' . "\n";
+        }
+        echo '<meta property="og:site_name" content="' . esc_attr(get_bloginfo('name')) . '">' . "\n";
+
+        // Twitter Card
+        echo '<meta name="twitter:card" content="summary_large_image">' . "\n";
+        echo '<meta name="twitter:title" content="' . esc_attr($title) . '">' . "\n";
+        echo '<meta name="twitter:description" content="' . esc_attr($description) . '">' . "\n";
+        if ($image) {
+            echo '<meta name="twitter:image" content="' . esc_url($image) . '">' . "\n";
+        }
+
+        // Author
+        $author = get_the_author();
+        echo '<meta name="author" content="' . esc_attr($author) . '">' . "\n";
+
+        // Date
+        echo '<meta property="article:published_time" content="' . get_the_date('c') . '">' . "\n";
+        echo '<meta property="article:modified_time" content="' . get_the_modified_date('c') . '">' . "\n";
+    }
+}
+add_action('wp_head', 'shiftzoner_add_seo_meta', 1);
+
+/**
+ * Schema.org - Structured Data
+ */
+function shiftzoner_add_schema_org() {
+    if (is_singular('car_photo')) {
+        global $post;
+
+        $title = get_the_title();
+        $description = wp_trim_words(get_the_excerpt(), 30);
+        $image = get_the_post_thumbnail_url($post->ID, 'full');
+        $url = get_permalink();
+        $author = get_the_author();
+        $author_url = get_author_posts_url(get_the_author_meta('ID'));
+
+        $schema = array(
+            '@context' => 'https://schema.org',
+            '@type' => 'ImageObject',
+            'name' => $title,
+            'description' => $description,
+            'url' => $url,
+            'contentUrl' => $image,
+            'datePublished' => get_the_date('c'),
+            'dateModified' => get_the_modified_date('c'),
+            'author' => array(
+                '@type' => 'Person',
+                'name' => $author,
+                'url' => $author_url,
+            ),
+            'publisher' => array(
+                '@type' => 'Organization',
+                'name' => get_bloginfo('name'),
+                'url' => home_url(),
+            ),
+        );
+
+        // Add GPS if available
+        $gps_lat = get_post_meta($post->ID, '_szr_gps_lat', true);
+        $gps_lng = get_post_meta($post->ID, '_szr_gps_lng', true);
+        if ($gps_lat && $gps_lng) {
+            $schema['contentLocation'] = array(
+                '@type' => 'Place',
+                'geo' => array(
+                    '@type' => 'GeoCoordinates',
+                    'latitude' => $gps_lat,
+                    'longitude' => $gps_lng,
+                ),
+            );
+        }
+
+        echo '<script type="application/ld+json">' . wp_json_encode($schema, JSON_UNESCAPED_SLASHES) . '</script>' . "\n";
+    }
+
+    // Homepage schema
+    if (is_front_page()) {
+        $schema = array(
+            '@context' => 'https://schema.org',
+            '@type' => 'WebSite',
+            'name' => get_bloginfo('name'),
+            'description' => get_bloginfo('description'),
+            'url' => home_url(),
+            'potentialAction' => array(
+                '@type' => 'SearchAction',
+                'target' => home_url('/?s={search_term_string}'),
+                'query-input' => 'required name=search_term_string',
+            ),
+        );
+
+        echo '<script type="application/ld+json">' . wp_json_encode($schema, JSON_UNESCAPED_SLASHES) . '</script>' . "\n";
+    }
+}
+add_action('wp_head', 'shiftzoner_add_schema_org', 2);
+
+/**
+ * BuddyPress Integration
+ */
+function shiftzoner_buddypress_integration() {
+    if (function_exists('bp_is_active')) {
+        // Ajouter le support BuddyPress
+        add_theme_support('buddypress');
+
+        // Rediriger vers le profil après login
+        add_filter('login_redirect', function($redirect_to, $request, $user) {
+            if (isset($user->ID) && function_exists('bp_core_get_user_domain')) {
+                return bp_core_get_user_domain($user->ID);
+            }
+            return $redirect_to;
+        }, 10, 3);
+    }
+}
+add_action('after_setup_theme', 'shiftzoner_buddypress_integration');
+
+/**
+ * Fonctions AJAX supplémentaires
+ */
+
+// AJAX - Filtrer les photos
+add_action('wp_ajax_szr_filter_photos', 'szr_filter_photos_ajax');
+add_action('wp_ajax_nopriv_szr_filter_photos', 'szr_filter_photos_ajax');
+
+function szr_filter_photos_ajax() {
+    $search = sanitize_text_field($_POST['search'] ?? '');
+    $brand = intval($_POST['brand'] ?? 0);
+    $model = intval($_POST['model'] ?? 0);
+    $year = intval($_POST['year'] ?? 0);
+    $sort = sanitize_text_field($_POST['sort'] ?? 'date');
+    $page = intval($_POST['page'] ?? 1);
+
+    $args = array(
+        'post_type' => 'car_photo',
+        'posts_per_page' => 12,
+        'paged' => $page,
+        'post_status' => 'publish',
+    );
+
+    // Search
+    if ($search) {
+        $args['s'] = $search;
+    }
+
+    // Tax query
+    $tax_query = array();
+    if ($brand) {
+        $tax_query[] = array(
+            'taxonomy' => 'car_brand',
+            'field' => 'term_id',
+            'terms' => $brand,
+        );
+    }
+    if ($model) {
+        $tax_query[] = array(
+            'taxonomy' => 'car_model',
+            'field' => 'term_id',
+            'terms' => $model,
+        );
+    }
+    if ($year) {
+        $tax_query[] = array(
+            'taxonomy' => 'car_year',
+            'field' => 'term_id',
+            'terms' => $year,
+        );
+    }
+    if (!empty($tax_query)) {
+        $args['tax_query'] = $tax_query;
+    }
+
+    // Sort
+    switch ($sort) {
+        case 'votes':
+            $args['meta_key'] = '_szr_vote_score';
+            $args['orderby'] = 'meta_value_num';
+            $args['order'] = 'DESC';
+            break;
+        case 'comments':
+            $args['orderby'] = 'comment_count';
+            $args['order'] = 'DESC';
+            break;
+        case 'views':
+            $args['meta_key'] = '_szr_views';
+            $args['orderby'] = 'meta_value_num';
+            $args['order'] = 'DESC';
+            break;
+        default:
+            $args['orderby'] = 'date';
+            $args['order'] = 'DESC';
+    }
+
+    $query = new WP_Query($args);
+
+    ob_start();
+    if ($query->have_posts()) {
+        while ($query->have_posts()) {
+            $query->the_post();
+            get_template_part('template-parts/content', 'photo-card');
+        }
+    } else {
+        echo '<div class="no-results"><h3>Aucune photo trouvée</h3><p>Essayez de modifier vos filtres.</p></div>';
+    }
+    $html = ob_get_clean();
+    wp_reset_postdata();
+
+    wp_send_json_success(array(
+        'html' => $html,
+        'has_more' => $query->max_num_pages > $page,
+    ));
+}
+
+// AJAX - Obtenir les modèles d'une marque
+add_action('wp_ajax_szr_get_models', 'szr_get_models_ajax');
+add_action('wp_ajax_nopriv_szr_get_models', 'szr_get_models_ajax');
+
+function szr_get_models_ajax() {
+    $brand_id = intval($_POST['brand_id'] ?? 0);
+
+    if (!$brand_id) {
+        wp_send_json_error('Brand ID required');
+    }
+
+    $brand = get_term($brand_id, 'car_brand');
+    if (!$brand || is_wp_error($brand)) {
+        wp_send_json_error('Brand not found');
+    }
+
+    // Get models - try different methods
+    $models = array();
+
+    // 1. Try child terms
+    $children = get_terms(array(
+        'taxonomy' => 'car_model',
+        'hide_empty' => false,
+        'parent' => $brand_id,
+    ));
+
+    if (!is_wp_error($children) && !empty($children)) {
+        $models = $children;
+    } else {
+        // 2. Try by meta
+        $by_meta = get_terms(array(
+            'taxonomy' => 'car_model',
+            'hide_empty' => false,
+            'meta_query' => array(
+                array(
+                    'key' => '_szr_model_brand',
+                    'value' => $brand_id,
+                    'compare' => '=',
+                ),
+            ),
+        ));
+
+        if (!is_wp_error($by_meta) && !empty($by_meta)) {
+            $models = $by_meta;
+        }
+    }
+
+    $result = array();
+    foreach ($models as $model) {
+        $result[] = array(
+            'id' => $model->term_id,
+            'name' => $model->name,
+        );
+    }
+
+    wp_send_json_success(array('models' => $result));
+}
+
+// AJAX - Photos pour la carte
+add_action('wp_ajax_szr_map_photos', 'szr_map_photos_ajax');
+add_action('wp_ajax_nopriv_szr_map_photos', 'szr_map_photos_ajax');
+
+function szr_map_photos_ajax() {
+    $brand = intval($_POST['brand'] ?? 0);
+    $model = intval($_POST['model'] ?? 0);
+    $author = intval($_POST['author'] ?? 0);
+
+    $args = array(
+        'post_type' => 'car_photo',
+        'posts_per_page' => -1,
+        'post_status' => 'publish',
+        'meta_query' => array(
+            array(
+                'key' => '_szr_gps_lat',
+                'compare' => 'EXISTS',
+            ),
+            array(
+                'key' => '_szr_gps_lng',
+                'compare' => 'EXISTS',
+            ),
+        ),
+    );
+
+    $tax_query = array();
+    if ($brand) {
+        $tax_query[] = array(
+            'taxonomy' => 'car_brand',
+            'field' => 'term_id',
+            'terms' => $brand,
+        );
+    }
+    if ($model) {
+        $tax_query[] = array(
+            'taxonomy' => 'car_model',
+            'field' => 'term_id',
+            'terms' => $model,
+        );
+    }
+    if (!empty($tax_query)) {
+        $args['tax_query'] = $tax_query;
+    }
+
+    if ($author) {
+        $args['author'] = $author;
+    }
+
+    $query = new WP_Query($args);
+
+    $photos = array();
+    if ($query->have_posts()) {
+        while ($query->have_posts()) {
+            $query->the_post();
+
+            $lat = get_post_meta(get_the_ID(), '_szr_gps_lat', true);
+            $lng = get_post_meta(get_the_ID(), '_szr_gps_lng', true);
+
+            if ($lat && $lng) {
+                $author_id = get_the_author_meta('ID');
+                $user_color = get_user_meta($author_id, '_szr_user_color', true) ?: '#888888';
+
+                $photos[] = array(
+                    'id' => get_the_ID(),
+                    'title' => get_the_title(),
+                    'url' => get_permalink(),
+                    'thumbnail' => get_the_post_thumbnail_url(get_the_ID(), 'thumbnail'),
+                    'lat' => floatval($lat),
+                    'lng' => floatval($lng),
+                    'author' => get_the_author(),
+                    'user_color' => $user_color,
+                    'date' => get_the_date(),
+                );
+            }
+        }
+    }
+    wp_reset_postdata();
+
+    wp_send_json_success(array('photos' => $photos));
+}
+
+// Incrémenter les vues
+function shiftzoner_increment_views() {
+    if (is_singular('car_photo')) {
+        global $post;
+        $views = get_post_meta($post->ID, '_szr_views', true);
+        $views = $views ? intval($views) + 1 : 1;
+        update_post_meta($post->ID, '_szr_views', $views);
+    }
+}
+add_action('wp_head', 'shiftzoner_increment_views');
