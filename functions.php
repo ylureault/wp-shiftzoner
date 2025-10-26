@@ -922,3 +922,130 @@ function shiftzoner_user_stats_shortcode( $atts ) {
     return ob_get_clean();
 }
 add_shortcode( 'shiftzoner_stats', 'shiftzoner_user_stats_shortcode' );
+
+// 16. OPTIMISATIONS PERFORMANCES & MOBILE
+
+// Lazy loading automatique pour toutes les images
+add_filter( 'wp_lazy_loading_enabled', '__return_true' );
+
+// Ajouter loading="lazy" à toutes les images
+function shiftzoner_add_lazy_load( $attr, $attachment, $size ) {
+    $attr['loading'] = 'lazy';
+    $attr['decoding'] = 'async';
+    return $attr;
+}
+add_filter( 'wp_get_attachment_image_attributes', 'shiftzoner_add_lazy_load', 10, 3 );
+
+// Defer JavaScript pour performance
+function shiftzoner_defer_scripts( $tag, $handle, $src ) {
+    // Skip jQuery and admin scripts
+    if ( is_admin() || strpos( $handle, 'jquery' ) !== false ) {
+        return $tag;
+    }
+
+    // Defer non-essential scripts
+    $defer_scripts = array( 'comment-reply', 'wp-embed' );
+    if ( in_array( $handle, $defer_scripts ) ) {
+        return str_replace( '<script ', '<script defer ', $tag );
+    }
+
+    return $tag;
+}
+add_filter( 'script_loader_tag', 'shiftzoner_defer_scripts', 10, 3 );
+
+// Optimiser base de données
+function shiftzoner_optimize_queries() {
+    // Désactiver emojis (économise 2 requêtes HTTP)
+    remove_action( 'wp_head', 'print_emoji_detection_script', 7 );
+    remove_action( 'wp_print_styles', 'print_emoji_styles' );
+
+    // Désactiver embeds
+    remove_action( 'wp_head', 'wp_oembed_add_discovery_links' );
+    remove_action( 'wp_head', 'wp_oembed_add_host_js' );
+
+    // Désactiver WordPress generator
+    remove_action( 'wp_head', 'wp_generator' );
+
+    // Désactiver RSD link
+    remove_action( 'wp_head', 'rsd_link' );
+
+    // Désactiver Windows Live Writer
+    remove_action( 'wp_head', 'wlwmanifest_link' );
+
+    // Désactiver shortlink
+    remove_action( 'wp_head', 'wp_shortlink_wp_head' );
+}
+add_action( 'init', 'shiftzoner_optimize_queries' );
+
+// Précharger les ressources critiques
+function shiftzoner_preload_resources() {
+    echo '<link rel="preconnect" href="https://fonts.googleapis.com">';
+    echo '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>';
+    echo '<link rel="dns-prefetch" href="//fonts.googleapis.com">';
+    echo '<link rel="dns-prefetch" href="//fonts.gstatic.com">';
+
+    // Preload Leaflet for map pages
+    if ( is_page_template( 'page-carte.php' ) ) {
+        echo '<link rel="preload" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" as="style">';
+        echo '<link rel="preload" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" as="script">';
+    }
+}
+add_action( 'wp_head', 'shiftzoner_preload_resources', 1 );
+
+// Responsive images avec srcset
+function shiftzoner_responsive_images() {
+    add_theme_support( 'responsive-embeds' );
+    add_theme_support( 'align-wide' );
+    add_theme_support( 'editor-styles' );
+}
+add_action( 'after_setup_theme', 'shiftzoner_responsive_images' );
+
+// Compression GZIP
+function shiftzoner_enable_gzip() {
+    if ( ! ini_get( 'output_buffering' ) ) {
+        ob_start( 'ob_gzhandler' );
+    }
+}
+add_action( 'init', 'shiftzoner_enable_gzip' );
+
+// Cache browser (via headers)
+function shiftzoner_browser_cache() {
+    if ( ! is_admin() ) {
+        header( 'Cache-Control: public, max-age=31536000' );
+    }
+}
+add_action( 'send_headers', 'shiftzoner_browser_cache' );
+
+// Optimiser images uploadées automatiquement
+function shiftzoner_optimize_uploaded_images( $file ) {
+    if ( ! function_exists( 'wp_get_image_editor' ) ) {
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+    }
+
+    $editor = wp_get_image_editor( $file['tmp_name'] );
+    if ( ! is_wp_error( $editor ) ) {
+        $editor->set_quality( 85 ); // Qualité optimale
+        $editor->save( $file['tmp_name'] );
+    }
+
+    return $file;
+}
+add_filter( 'wp_handle_upload_prefilter', 'shiftzoner_optimize_uploaded_images' );
+
+// Touch-friendly tables
+function shiftzoner_responsive_tables( $content ) {
+    $content = str_replace( '<table', '<div class="table-responsive"><table', $content );
+    $content = str_replace( '</table>', '</table></div>', $content );
+    return $content;
+}
+add_filter( 'the_content', 'shiftzoner_responsive_tables' );
+
+// Viewport meta pour PWA
+function shiftzoner_pwa_meta() {
+    echo '<meta name="theme-color" content="#0a0a0a">';
+    echo '<meta name="mobile-web-app-capable" content="yes">';
+    echo '<meta name="apple-mobile-web-app-capable" content="yes">';
+    echo '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">';
+    echo '<meta name="apple-mobile-web-app-title" content="ShiftZoneR">';
+}
+add_action( 'wp_head', 'shiftzoner_pwa_meta', 0 );

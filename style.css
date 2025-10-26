@@ -4,11 +4,11 @@ Theme URI: https://shiftzoner.com
 Author: Rafael
 Author URI: https://shiftzoner.com
 Description: Plateforme communautaire dédiée aux passionnés d'automobile et de photographie. Partagez, explorez et commentez des photos de voitures classées par marque, modèle et année.
-Version: 1.0.0
+Version: 1.2.0
 License: GNU General Public License v2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 Text Domain: shiftzoner
-Tags: photography, community, automotive, cars, gallery, forum
+Tags: photography, community, automotive, cars, gallery, forum, responsive, mobile-friendly
 */
 
 /* ====== Variables CSS ====== */
@@ -168,13 +168,95 @@ img {
     overflow: hidden;
 }
 
-/* ====== Responsive ====== */
-@media (max-width: 968px) {
+/* ====== Responsive & Mobile Optimization ====== */
+
+/* Tablettes */
+@media (max-width: 1024px) {
+    .container {
+        padding: 0 1.5rem;
+    }
+
+    .section-title {
+        font-size: 2.5rem;
+    }
+
+    .section-subtitle {
+        font-size: 1.1rem;
+        margin-bottom: 3rem;
+    }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
     .section-title {
         font-size: 2rem;
     }
 
+    .section-subtitle {
+        font-size: 1rem;
+        margin-bottom: 2rem;
+    }
+
     .container {
         padding: 0 1rem;
+    }
+
+    .cta-button,
+    .secondary-button {
+        padding: 0.75rem 1.5rem;
+        font-size: 0.95rem;
+        width: 100%;
+        text-align: center;
+    }
+
+    /* Images responsive */
+    img {
+        width: 100%;
+        height: auto;
+    }
+
+    /* Tables responsive */
+    table {
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+/* Petit mobile */
+@media (max-width: 480px) {
+    .section-title {
+        font-size: 1.75rem;
+    }
+
+    .section-subtitle {
+        font-size: 0.95rem;
+    }
+
+    .container {
+        padding: 0 0.875rem;
+    }
+
+    .cta-button,
+    .secondary-button {
+        padding: 0.65rem 1.25rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* Optimisation tactile */
+@media (hover: none) and (pointer: coarse) {
+    /* Tailles minimales pour éléments cliquables */
+    button,
+    .cta-button,
+    .secondary-button,
+    a[role="button"] {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    /* Meilleur espacement pour touch */
+    nav a {
+        padding: 0.5rem;
     }
 }
