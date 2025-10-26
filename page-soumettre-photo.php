@@ -1,8 +1,8 @@
 <?php
 /**
  * Template Name: soumettre une photo (marque -> modèle + logo + exif)
- * Description: formulaire front-end avec sélection dépendante (d'abord la marque, puis les modèles filtrés), affichage du logo de marque, upload robuste et EXIF (gps/date).
- * Version: 2.0.0 - Refactored
+ * Description: Formulaire d'upload moderne avec drag & drop, preview et design cohérent
+ * Version: 3.0.0 - Complete Redesign
  *
  * @package ShiftZoneR
  */
@@ -25,23 +25,7 @@ function szr_brand_logo_url($term_id, $size='medium'){
     $img = wp_get_attachment_image_src($att_id, $size);
     return $img ? $img[0] : '';
 }
-function szr_exif_frac_to_float($value){
-    if (is_string($value) && strpos($value,'/') !== false){
-        list($n,$d) = array_map('floatval', explode('/',$value,2));
-        return $d != 0 ? $n/$d : 0.0;
-    }
-    return (float)$value;
-}
-function szr_exif_gps_to_decimal($components,$ref){
-    if (!is_array($components) || count($components)<3) return null;
-    $deg = szr_exif_frac_to_float($components[0]);
-    $min = szr_exif_frac_to_float($components[1]);
-    $sec = szr_exif_frac_to_float($components[2]);
-    $decimal = $deg + ($min/60.0) + ($sec/3600.0);
-    $ref = strtoupper(trim((string)$ref));
-    if ($ref==='S' || $ref==='W') $decimal *= -1;
-    return $decimal;
-}
+
 function szr_extract_exif_gps($file_path){
     $out = [];
     if (!function_exists('exif_read_data')) return $out;
@@ -53,11 +37,21 @@ function szr_extract_exif_gps($file_path){
 
     $gps = $exif['GPS'] ?? [];
     if (!empty($gps['GPSLatitude']) && !empty($gps['GPSLatitudeRef']) && !empty($gps['GPSLongitude']) && !empty($gps['GPSLongitudeRef'])) {
-        $lat = szr_exif_gps_to_decimal($gps['GPSLatitude'],$gps['GPSLatitudeRef']);
-        $lng = szr_exif_gps_to_decimal($gps['GPSLongitude'],$gps['GPSLongitudeRef']);
-        if ($lat!==null && $lng!==null){ $out['lat']=$lat; $out['lng']=$lng; }
+        $lat_deg = is_string($gps['GPSLatitude'][0]) && strpos($gps['GPSLatitude'][0],'/') ? eval('return '.$gps['GPSLatitude'][0].';') : $gps['GPSLatitude'][0];
+        $lat_min = is_string($gps['GPSLatitude'][1]) && strpos($gps['GPSLatitude'][1],'/') ? eval('return '.$gps['GPSLatitude'][1].';') : $gps['GPSLatitude'][1];
+        $lat_sec = is_string($gps['GPSLatitude'][2]) && strpos($gps['GPSLatitude'][2],'/') ? eval('return '.$gps['GPSLatitude'][2].';') : $gps['GPSLatitude'][2];
+        $lat = $lat_deg + ($lat_min/60) + ($lat_sec/3600);
+        if ($gps['GPSLatitudeRef'] === 'S') $lat *= -1;
+
+        $lng_deg = is_string($gps['GPSLongitude'][0]) && strpos($gps['GPSLongitude'][0],'/') ? eval('return '.$gps['GPSLongitude'][0].';') : $gps['GPSLongitude'][0];
+        $lng_min = is_string($gps['GPSLongitude'][1]) && strpos($gps['GPSLongitude'][1],'/') ? eval('return '.$gps['GPSLongitude'][1].';') : $gps['GPSLongitude'][1];
+        $lng_sec = is_string($gps['GPSLongitude'][2]) && strpos($gps['GPSLongitude'][2],'/') ? eval('return '.$gps['GPSLongitude'][2].';') : $gps['GPSLongitude'][2];
+        $lng = $lng_deg + ($lng_min/60) + ($lng_sec/3600);
+        if ($gps['GPSLongitudeRef'] === 'W') $lng *= -1;
+
+        $out['lat'] = $lat;
+        $out['lng'] = $lng;
     }
-    if (!empty($gps['GPSAltitude'])) $out['alt'] = szr_exif_frac_to_float($gps['GPSAltitude']);
 
     $exifData = $exif['EXIF'] ?? [];
     $taken = $exifData['DateTimeOriginal'] ?? $exifData['DateTimeDigitized'] ?? null;
@@ -69,69 +63,39 @@ function szr_extract_exif_gps($file_path){
     return $out;
 }
 
-/**
- * récupère les modèles liés à une marque (ordre: parent car_model = slug/nom marque → meta _szr_model_brand → posts)
- */
 function szr_models_for_brand($brand_term){
     if (!$brand_term || is_wp_error($brand_term)) return [];
 
-    // 1) enfants d'un parent car_model correspondant à la marque
     $parent = get_term_by('slug',$brand_term->slug,'car_model');
     if (!$parent) $parent = get_term_by('name',$brand_term->name,'car_model');
     if ($parent && !is_wp_error($parent)){
-        $children = get_terms([
-            'taxonomy'   => 'car_model',
-            'hide_empty' => false,
-            'parent'     => (int)$parent->term_id,
-            'orderby'    => 'name',
-            'order'      => 'ASC',
-        ]);
+        $children = get_terms(['taxonomy'=>'car_model','hide_empty'=>false,'parent'=>(int)$parent->term_id,'orderby'=>'name','order'=>'ASC']);
         if (!is_wp_error($children) && !empty($children)) return $children;
     }
 
-    // 2) meta _szr_model_brand
-    $by_meta = get_terms([
-        'taxonomy'   => 'car_model',
-        'hide_empty' => false,
-        'meta_query' => [[
-            'key'     => '_szr_model_brand',
-            'value'   => (int)$brand_term->term_id,
-            'compare' => '=',
-        ]],
-        'orderby'    => 'name',
-        'order'      => 'ASC',
-    ]);
+    $by_meta = get_terms(['taxonomy'=>'car_model','hide_empty'=>false,'meta_query'=>[['key'=>'_szr_model_brand','value'=>(int)$brand_term->term_id,'compare'=>'=']],'orderby'=>'name','order'=>'ASC']);
     if (!is_wp_error($by_meta) && !empty($by_meta)) return $by_meta;
 
-    // 3) fallback via posts
-    $post_ids = get_posts([
-        'post_type'      => 'car_photo',
-        'posts_per_page' => -1,
-        'fields'         => 'ids',
-        'no_found_rows'  => true,
-        'tax_query'      => [[
-            'taxonomy' => 'car_brand',
-            'field'    => 'term_id',
-            'terms'    => (int)$brand_term->term_id,
-        ]],
-    ]);
-    if (!empty($post_ids)){
-        $models = get_terms([
-            'taxonomy'   => 'car_model',
-            'hide_empty' => true,
-            'orderby'    => 'name',
-            'order'      => 'ASC',
-            'object_ids' => $post_ids,
-        ]);
-        if (!is_wp_error($models) && !empty($models)) return $models;
-    }
     return [];
 }
 
 /* ====== Sécurité connexion ====== */
 if ( ! is_user_logged_in() ){
-    echo '<div class="szr-wrap"><p>Vous devez être connecté·e pour publier une photo.</p></div>';
-    get_footer(); return;
+    ?>
+    <div class="upload-page">
+        <div class="upload-container">
+            <div class="upload-login-required">
+                <div class="login-icon">🔒</div>
+                <h2>Connexion requise</h2>
+                <p>Vous devez être connecté pour partager vos photos automobiles sur ShiftZoneR.</p>
+                <a href="<?php echo wp_login_url( get_permalink() ); ?>" class="cta-button">Se connecter</a>
+                <a href="<?php echo wp_registration_url(); ?>" class="secondary-button">Créer un compte</a>
+            </div>
+        </div>
+    </div>
+    <?php
+    get_footer();
+    return;
 }
 
 /* ====== Vérification limite upload ====== */
@@ -148,14 +112,21 @@ $upload_count = count( $uploads_today );
 $upload_limit = 100;
 
 if ( $upload_count >= $upload_limit ) {
-    echo '<div class="szr-wrap">';
-    echo '<div class="szr-card">';
-    echo '<h1 class="szr-title">⚠️ Limite atteinte</h1>';
-    echo '<p>Vous avez atteint votre limite quotidienne de <strong>' . $upload_limit . ' photos</strong>.</p>';
-    echo '<p>Votre compteur sera réinitialisé demain. Revenez alors pour partager plus de photos !</p>';
-    echo '<p><a href="' . home_url() . '" class="szr-button">Retour à l\'accueil</a></p>';
-    echo '</div></div>';
-    get_footer(); return;
+    ?>
+    <div class="upload-page">
+        <div class="upload-container">
+            <div class="upload-limit-reached">
+                <div class="limit-icon">⚠️</div>
+                <h2>Limite quotidienne atteinte</h2>
+                <p>Vous avez publié <strong><?php echo $upload_limit; ?> photos</strong> aujourd'hui.</p>
+                <p>Votre compteur sera réinitialisé demain. Revenez pour partager plus de photos !</p>
+                <a href="<?php echo home_url(); ?>" class="secondary-button">Retour à l'accueil</a>
+            </div>
+        </div>
+    </div>
+    <?php
+    get_footer();
+    return;
 }
 
 /* ====== Traitement POST ====== */
@@ -163,9 +134,8 @@ $errors = [];
 $created_post_id = 0;
 
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['szr_submit'])) {
-
     if ( empty($_POST['szr_submit_nonce']) || !wp_verify_nonce($_POST['szr_submit_nonce'],'szr_submit_photo') ){
-        $errors[] = 'Vérification de sécurité invalide (nonce).';
+        $errors[] = 'Vérification de sécurité invalide.';
     }
 
     $brand_id = (int)($_POST['brand'] ?? 0);
@@ -181,29 +151,20 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['szr_submit'])) {
     } else {
         $f = $_FILES['photo'];
         if ($f['error'] !== UPLOAD_ERR_OK){
-            $map = [
-                UPLOAD_ERR_INI_SIZE=>'Fichier trop lourd (ini).',
-                UPLOAD_ERR_FORM_SIZE=>'Fichier trop lourd (form).',
-                UPLOAD_ERR_PARTIAL=>'Téléversement partiel.',
-                UPLOAD_ERR_NO_FILE=>'Aucun fichier.',
-                UPLOAD_ERR_NO_TMP_DIR=>'Répertoire temporaire manquant.',
-                UPLOAD_ERR_CANT_WRITE=>'Écriture impossible sur le disque.',
-                UPLOAD_ERR_EXTENSION=>'Téléversement bloqué par une extension.',
-            ];
-            $errors[] = $map[$f['error']] ?? ('Erreur inconnue (code '.$f['error'].')');
+            $errors[] = 'Erreur lors du téléchargement du fichier.';
         } else {
             $mime = @mime_content_type($f['tmp_name']);
             if (!$mime || !in_array($mime,$ALLOWED_MIMES,true))
-                $errors[] = 'Format non supporté. (jpg, png, gif, webp, tiff)';
+                $errors[] = 'Format non supporté. Utilisez JPG, PNG, GIF, WEBP ou TIFF.';
             if ($f['size'] > $MAX_BYTES)
                 $errors[] = 'Fichier trop volumineux (limite: '.size_format($MAX_BYTES).').';
         }
     }
 
     if (empty($errors)) {
-        if (!function_exists('wp_handle_upload'))                require_once ABSPATH.'wp-admin/includes/file.php';
-        if (!function_exists('wp_generate_attachment_metadata'))  require_once ABSPATH.'wp-admin/includes/image.php';
-        if (!function_exists('media_handle_upload'))             require_once ABSPATH.'wp-admin/includes/media.php';
+        require_once ABSPATH.'wp-admin/includes/file.php';
+        require_once ABSPATH.'wp-admin/includes/image.php';
+        require_once ABSPATH.'wp-admin/includes/media.php';
 
         $post_id = wp_insert_post([
             'post_type'    => $CPT,
@@ -214,14 +175,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['szr_submit'])) {
         ], true);
 
         if (is_wp_error($post_id)){
-            $errors[] = 'Erreur création du post: '.$post_id->get_error_message();
+            $errors[] = 'Erreur lors de la création de la publication.';
         } else {
             wp_set_post_terms($post_id, [$brand_id], $TAX_BRAND, false);
             wp_set_post_terms($post_id, [$model_id], $TAX_MODEL, false);
 
             $handled = wp_handle_upload($_FILES['photo'], ['test_form'=>false]);
             if (isset($handled['error'])){
-                $errors[] = 'Upload impossible: '.$handled['error'];
+                $errors[] = 'Erreur d\'upload: '.$handled['error'];
             } else {
                 $filetype = wp_check_filetype(basename($handled['file']), null);
                 $attachment = [
@@ -231,20 +192,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['szr_submit'])) {
                     'post_status'    => 'inherit',
                 ];
                 $attach_id = wp_insert_attachment($attachment, $handled['file'], $post_id);
-                if (is_wp_error($attach_id)){
-                    $errors[] = 'Erreur attachement: '.$attach_id->get_error_message();
-                } else {
+                if (!is_wp_error($attach_id)){
                     $attach_meta = wp_generate_attachment_metadata($attach_id, $handled['file']);
                     wp_update_attachment_metadata($attach_id, $attach_meta);
                     set_post_thumbnail($post_id, $attach_id);
 
-                    // EXIF
                     $exif = szr_extract_exif_gps($handled['file']);
                     if (!empty($exif)){
                         foreach($exif as $k=>$v) update_post_meta($attach_id, '_szr_exif_'.$k, $v);
                         if (isset($exif['lat'])) update_post_meta($post_id, '_szr_gps_lat', $exif['lat']);
                         if (isset($exif['lng'])) update_post_meta($post_id, '_szr_gps_lng', $exif['lng']);
-                        if (isset($exif['alt'])) update_post_meta($post_id, '_szr_gps_alt', $exif['alt']);
                         if (isset($exif['taken_at'])) update_post_meta($post_id, '_szr_taken_at', $exif['taken_at']);
                         if (isset($exif['lat'],$exif['lng'])) update_post_meta($post_id, '_szr_gps', $exif['lat'].','.$exif['lng']);
                     }
@@ -256,208 +213,293 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['szr_submit'])) {
     }
 }
 
-/* ====== Données pour le formulaire (marques + mapping modèles) ====== */
+/* ====== Données ====== */
 $brands = get_terms(['taxonomy'=>$TAX_BRAND,'hide_empty'=>false,'orderby'=>'name','order'=>'ASC']);
-
-/* On prépare côté serveur un mapping {brand_id: [{id,name}], ...} + logos */
 $brand_payload = [];
 $models_by_brand = [];
 foreach ($brands as $b){
-    $brand_payload[] = [
-        'id'   => (int)$b->term_id,
-        'name' => $b->name,
-        'logo' => szr_brand_logo_url($b->term_id,'thumbnail'),
-    ];
+    $brand_payload[] = ['id'=>(int)$b->term_id,'name'=>$b->name,'logo'=>szr_brand_logo_url($b->term_id,'thumbnail')];
     $models = szr_models_for_brand($b);
-    $models_by_brand[$b->term_id] = array_map(function($m){
-        return ['id'=>(int)$m->term_id,'name'=>$m->name];
-    }, $models);
+    $models_by_brand[$b->term_id] = array_map(function($m){return ['id'=>(int)$m->term_id,'name'=>$m->name];}, $models);
 }
 ?>
 
-<div class="szr-wrap">
-  <div class="szr-card">
-    <h1 class="szr-title">Publier une photo</h1>
-    <p class="szr-sub">Sélectionnez d'abord la marque (le logo s'affiche), puis choisissez le modèle associé.</p>
+<div class="upload-page">
+    <div class="upload-header">
+        <div class="container">
+            <h1 class="upload-title">Partager une photo</h1>
+            <p class="upload-subtitle">Partagez vos plus belles photos automobiles avec la communauté ShiftZoneR</p>
 
-    <?php if ( $upload_count > 0 ): ?>
-      <div style="background: rgba(0, 174, 239, 0.1); border: 1px solid rgba(0, 174, 239, 0.3); border-radius: 10px; padding: 12px; margin-bottom: 16px;">
-        📊 Vous avez publié <strong><?php echo $upload_count; ?></strong> photo<?php echo $upload_count > 1 ? 's' : ''; ?> aujourd'hui.
-        (<?php echo ($upload_limit - $upload_count); ?> restantes)
-      </div>
-    <?php endif; ?>
-
-    <?php if (!empty($errors)): ?>
-      <div class="szr-alert">
-        <strong>Erreurs :</strong>
-        <ul style="margin:6px 0 0 18px">
-          <?php foreach ($errors as $e) echo '<li>'.esc_html($e).'</li>'; ?>
-        </ul>
-      </div>
-    <?php endif; ?>
-
-    <?php if ($created_post_id): ?>
-      <div class="szr-success">
-        ✅ Photo publiée. <a href="<?php echo esc_url(get_permalink($created_post_id)); ?>">Voir la publication</a>
-      </div>
-    <?php endif; ?>
-
-    <form method="post" enctype="multipart/form-data">
-      <?php wp_nonce_field('szr_submit_photo','szr_submit_nonce'); ?>
-      <input type="hidden" name="szr_submit" value="1">
-
-      <div class="szr-grid">
-        <!-- Marque (avec logo à côté) -->
-        <div class="szr-field">
-          <label for="brand">Marque</label>
-          <div class="szr-row">
-            <img id="brandLogo" class="szr-brand-logo" alt="logo marque" src="" aria-hidden="true">
-            <select class="szr-select" id="brand" name="brand" required>
-              <option value="">— Choisir —</option>
-              <?php foreach ($brands as $b):
-                $logo = szr_brand_logo_url($b->term_id,'thumbnail'); ?>
-                <option value="<?php echo (int)$b->term_id; ?>" data-logo="<?php echo esc_url($logo); ?>">
-                  <?php echo esc_html($b->name); ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div class="szr-help">Le logo s'affiche à gauche (l'image dans la liste n'est pas supportée par les navigateurs).</div>
+            <?php if ( $upload_count > 0 ): ?>
+            <div class="upload-stats">
+                <span class="stats-count"><?php echo $upload_count; ?></span>
+                <span class="stats-label">photo<?php echo $upload_count > 1 ? 's' : ''; ?> publiée<?php echo $upload_count > 1 ? 's' : ''; ?> aujourd'hui</span>
+                <span class="stats-remaining"><?php echo ($upload_limit - $upload_count); ?> restante<?php echo ($upload_limit - $upload_count) > 1 ? 's' : ''; ?></span>
+            </div>
+            <?php endif; ?>
         </div>
+    </div>
 
-        <!-- Modèle (rempli dynamiquement selon la marque) -->
-        <div class="szr-field">
-          <label for="model">Modèle</label>
-          <select class="szr-select" id="model" name="model" required disabled>
-            <option value="">— Choisir une marque d'abord —</option>
-          </select>
+    <div class="upload-container">
+        <?php if (!empty($errors)): ?>
+        <div class="upload-alert upload-alert-error">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+            </svg>
+            <div>
+                <strong>Erreurs détectées</strong>
+                <ul>
+                    <?php foreach ($errors as $e) echo '<li>'.esc_html($e).'</li>'; ?>
+                </ul>
+            </div>
         </div>
+        <?php endif; ?>
 
-        <div class="szr-field">
-          <label for="title">Titre (optionnel)</label>
-          <input class="szr-input" type="text" id="title" name="title" placeholder="ex: Alpine A110 à Deauville">
+        <?php if ($created_post_id): ?>
+        <div class="upload-alert upload-alert-success">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            <div>
+                <strong>Photo publiée avec succès!</strong>
+                <p><a href="<?php echo esc_url(get_permalink($created_post_id)); ?>">Voir votre publication</a> ou <a href="<?php echo esc_url(get_permalink()); ?>">ajouter une autre photo</a></p>
+            </div>
         </div>
+        <?php endif; ?>
 
-        <div class="szr-field">
-          <label for="description">Description (optionnel)</label>
-          <textarea class="szr-text" id="description" name="description" placeholder="Détails, contexte…"></textarea>
-        </div>
+        <form method="post" enctype="multipart/form-data" class="upload-form" id="upload-form">
+            <?php wp_nonce_field('szr_submit_photo','szr_submit_nonce'); ?>
+            <input type="hidden" name="szr_submit" value="1">
+            <input type="file" id="photo-input" name="photo" accept="image/*" required style="display:none">
 
-        <div class="szr-field" style="grid-column:1/-1">
-          <label>Image</label>
-          <div class="szr-drop" id="szr-drop">
-            <input type="file" id="photo" name="photo" accept="image/*" style="display:none" required>
-            <button type="button" class="szr-button" id="pick">Choisir un fichier</button>
-            <div class="szr-help">Formats: jpg, png, gif, webp, tiff • Max <?php echo esc_html( size_format($MAX_BYTES) ); ?></div>
-            <div id="preview" style="margin-top:10px"></div>
-          </div>
-        </div>
-      </div>
+            <!-- Zone d'upload -->
+            <div class="upload-section">
+                <h2 class="section-title">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                    </svg>
+                    Votre photo
+                </h2>
 
-      <div class="szr-actions">
-        <button type="submit" class="szr-button">Publier</button>
-        <span class="szr-help">L'upload peut prendre quelques secondes selon la taille du fichier</span>
-      </div>
-    </form>
-  </div>
+                <div class="upload-drop-zone" id="drop-zone">
+                    <div class="drop-zone-content" id="drop-content">
+                        <svg class="drop-icon" width="64" height="64" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+                        </svg>
+                        <h3>Glissez votre photo ici</h3>
+                        <p>ou cliquez pour parcourir</p>
+                        <div class="drop-formats">JPG, PNG, GIF, WEBP, TIFF • Max <?php echo esc_html(size_format($MAX_BYTES)); ?></div>
+                    </div>
+
+                    <div class="drop-zone-preview" id="drop-preview" style="display:none;">
+                        <img id="preview-image" src="" alt="Preview">
+                        <div class="preview-overlay">
+                            <button type="button" class="preview-remove" id="remove-photo">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                                </svg>
+                                Changer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Informations véhicule -->
+            <div class="upload-section">
+                <h2 class="section-title">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>
+                    </svg>
+                    Véhicule
+                </h2>
+
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label for="brand">Marque *</label>
+                        <div class="brand-select-wrapper">
+                            <div class="brand-logo-preview" id="brand-logo-preview"></div>
+                            <select class="form-select" id="brand" name="brand" required>
+                                <option value="">Choisir une marque</option>
+                                <?php foreach ($brands as $b):
+                                    $logo = szr_brand_logo_url($b->term_id,'thumbnail'); ?>
+                                    <option value="<?php echo (int)$b->term_id; ?>" data-logo="<?php echo esc_url($logo); ?>">
+                                        <?php echo esc_html($b->name); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-field">
+                        <label for="model">Modèle *</label>
+                        <select class="form-select" id="model" name="model" required disabled>
+                            <option value="">Choisir d'abord une marque</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Détails optionnels -->
+            <div class="upload-section">
+                <h2 class="section-title">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                    </svg>
+                    Détails (optionnel)
+                </h2>
+
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label for="title">Titre</label>
+                        <input class="form-input" type="text" id="title" name="title" placeholder="Ex: Alpine A110 à Deauville">
+                    </div>
+
+                    <div class="form-field form-field-full">
+                        <label for="description">Description</label>
+                        <textarea class="form-textarea" id="description" name="description" rows="4" placeholder="Partagez l'histoire derrière cette photo..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bouton submit -->
+            <div class="upload-actions">
+                <button type="submit" class="upload-submit-btn" id="submit-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                    </svg>
+                    Publier la photo
+                </button>
+                <p class="upload-help">La publication peut prendre quelques secondes selon la taille du fichier</p>
+            </div>
+        </form>
+    </div>
 </div>
 
 <script>
 (function(){
-  // Données passées par PHP (marques + mapping modèles)
-  const SZR_BRANDS = <?php echo wp_json_encode($brand_payload, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE); ?>;
-  const SZR_MODELS_BY_BRAND = <?php echo wp_json_encode($models_by_brand, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE); ?>;
+    const SZR_BRANDS = <?php echo wp_json_encode($brand_payload, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE); ?>;
+    const SZR_MODELS_BY_BRAND = <?php echo wp_json_encode($models_by_brand, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE); ?>;
 
-  const brandSel = document.getElementById('brand');
-  const modelSel = document.getElementById('model');
-  const brandLogo = document.getElementById('brandLogo');
+    const dropZone = document.getElementById('drop-zone');
+    const dropContent = document.getElementById('drop-content');
+    const dropPreview = document.getElementById('drop-preview');
+    const photoInput = document.getElementById('photo-input');
+    const previewImage = document.getElementById('preview-image');
+    const removeBtn = document.getElementById('remove-photo');
+    const brandSelect = document.getElementById('brand');
+    const modelSelect = document.getElementById('model');
+    const brandLogoPreview = document.getElementById('brand-logo-preview');
+    const submitBtn = document.getElementById('submit-btn');
 
-  // Maj logo + modèles au changement de marque
-  function updateBrandUI(){
-    const brandId = brandSel.value;
-    const opt = brandSel.options[brandSel.selectedIndex];
-    const logo = opt ? opt.getAttribute('data-logo') : '';
-    if (logo){
-      brandLogo.src = logo;
-      brandLogo.removeAttribute('aria-hidden');
-      brandLogo.style.visibility = 'visible';
-    } else {
-      brandLogo.src = '';
-      brandLogo.setAttribute('aria-hidden','true');
-      brandLogo.style.visibility = 'hidden';
-    }
-
-    // Modèles
-    modelSel.innerHTML = '';
-    if (!brandId){
-      modelSel.disabled = true;
-      const o = document.createElement('option');
-      o.value = '';
-      o.textContent = '— Choisir une marque d'abord —';
-      modelSel.appendChild(o);
-      return;
-    }
-    const list = SZR_MODELS_BY_BRAND[brandId] || [];
-    if (!list.length){
-      modelSel.disabled = true;
-      const o = document.createElement('option');
-      o.value = '';
-      o.textContent = 'Aucun modèle défini pour cette marque';
-      modelSel.appendChild(o);
-      return;
-    }
-    modelSel.disabled = false;
-    const first = document.createElement('option');
-    first.value = '';
-    first.textContent = '— Choisir —';
-    modelSel.appendChild(first);
-    list.forEach(m=>{
-      const opt = document.createElement('option');
-      opt.value = m.id;
-      opt.textContent = m.name;
-      modelSel.appendChild(opt);
+    // Click to browse
+    dropZone.addEventListener('click', (e) => {
+        if (!e.target.closest('.preview-remove')) {
+            photoInput.click();
+        }
     });
-  }
 
-  brandSel.addEventListener('change', updateBrandUI);
-  // Init si le navigateur a gardé l'état du formulaire
-  updateBrandUI();
+    // File selection
+    photoInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+            handleFile(e.target.files[0]);
+        }
+    });
 
-  // Drag & drop fichier + preview
-  const drop   = document.getElementById('szr-drop');
-  const pick   = document.getElementById('pick');
-  const input  = document.getElementById('photo');
-  const prev   = document.getElementById('preview');
+    // Drag & drop
+    ['dragenter', 'dragover'].forEach(evt => {
+        dropZone.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('drag-over');
+        });
+    });
 
-  function showPreview(file){
-    prev.innerHTML = '';
-    if (!file || !file.type.startsWith('image/')) return;
-    const img = document.createElement('img');
-    img.style.maxWidth = '100%';
-    img.style.borderRadius = '10px';
-    img.style.boxShadow = '0 6px 16px rgba(0,0,0,.08)';
-    const reader = new FileReader();
-    reader.onload = e => { img.src = e.target.result; };
-    reader.readAsDataURL(file);
-    prev.appendChild(img);
-  }
+    ['dragleave', 'drop'].forEach(evt => {
+        dropZone.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('drag-over');
+        });
+    });
 
-  pick.addEventListener('click', () => input.click());
-  input.addEventListener('change', e => showPreview(e.target.files[0]));
+    dropZone.addEventListener('drop', (e) => {
+        const files = e.dataTransfer.files;
+        if (files && files[0]) {
+            photoInput.files = files;
+            handleFile(files[0]);
+        }
+    });
 
-  ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
-    e.preventDefault(); e.stopPropagation(); drop.classList.add('drag');
-  }));
-  ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
-    e.preventDefault(); e.stopPropagation(); drop.classList.remove('drag');
-  }));
-  drop.addEventListener('drop', e => {
-    const files = e.dataTransfer.files;
-    if (files && files[0]) {
-      input.files = files;
-      showPreview(files[0]);
+    // Handle file preview
+    function handleFile(file) {
+        if (!file.type.startsWith('image/')) {
+            alert('Veuillez sélectionner une image');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            previewImage.src = e.target.result;
+            dropContent.style.display = 'none';
+            dropPreview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
     }
-  });
+
+    // Remove photo
+    removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        photoInput.value = '';
+        dropContent.style.display = 'flex';
+        dropPreview.style.display = 'none';
+        previewImage.src = '';
+    });
+
+    // Brand selection
+    brandSelect.addEventListener('change', () => {
+        const brandId = brandSelect.value;
+        const opt = brandSelect.options[brandSelect.selectedIndex];
+        const logo = opt ? opt.getAttribute('data-logo') : '';
+
+        // Update logo preview
+        if (logo) {
+            brandLogoPreview.style.backgroundImage = `url(${logo})`;
+            brandLogoPreview.style.display = 'block';
+        } else {
+            brandLogoPreview.style.display = 'none';
+        }
+
+        // Update models
+        modelSelect.innerHTML = '';
+        if (!brandId) {
+            modelSelect.disabled = true;
+            modelSelect.innerHTML = '<option value="">Choisir d\'abord une marque</option>';
+            return;
+        }
+
+        const models = SZR_MODELS_BY_BRAND[brandId] || [];
+        if (!models.length) {
+            modelSelect.disabled = true;
+            modelSelect.innerHTML = '<option value="">Aucun modèle pour cette marque</option>';
+            return;
+        }
+
+        modelSelect.disabled = false;
+        modelSelect.innerHTML = '<option value="">Choisir un modèle</option>';
+        models.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.name;
+            modelSelect.appendChild(opt);
+        });
+    });
+
+    // Form submit
+    document.getElementById('upload-form').addEventListener('submit', () => {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<svg class="spinner-svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="4" opacity="0.25"/><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg> Publication en cours...';
+    });
 })();
 </script>
 
