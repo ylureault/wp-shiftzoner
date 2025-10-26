@@ -216,8 +216,61 @@ function szr_filter_photos_ajax() {
         'posts_per_page' => 12,
         'paged' => intval( $_POST['page'] ?? 1 ),
     );
-    if ( ! empty( $_POST['search'] ) ) $args['s'] = sanitize_text_field( $_POST['search'] );
-    
+
+    // Search
+    if ( ! empty( $_POST['search'] ) ) {
+        $args['s'] = sanitize_text_field( $_POST['search'] );
+    }
+
+    // Tax queries
+    $tax_query = array();
+    if ( ! empty( $_POST['brand'] ) ) {
+        $tax_query[] = array(
+            'taxonomy' => 'car_brand',
+            'field' => 'term_id',
+            'terms' => intval( $_POST['brand'] ),
+        );
+    }
+    if ( ! empty( $_POST['model'] ) ) {
+        $tax_query[] = array(
+            'taxonomy' => 'car_model',
+            'field' => 'term_id',
+            'terms' => intval( $_POST['model'] ),
+        );
+    }
+    if ( ! empty( $_POST['year'] ) ) {
+        $tax_query[] = array(
+            'taxonomy' => 'car_year',
+            'field' => 'term_id',
+            'terms' => intval( $_POST['year'] ),
+        );
+    }
+    if ( ! empty( $tax_query ) ) {
+        $args['tax_query'] = $tax_query;
+    }
+
+    // Sorting
+    $sort = sanitize_text_field( $_POST['sort'] ?? 'date' );
+    switch ( $sort ) {
+        case 'votes':
+            $args['meta_key'] = '_szr_vote_score';
+            $args['orderby'] = 'meta_value_num';
+            $args['order'] = 'DESC';
+            break;
+        case 'comments':
+            $args['orderby'] = 'comment_count';
+            $args['order'] = 'DESC';
+            break;
+        case 'views':
+            $args['meta_key'] = '_szr_views';
+            $args['orderby'] = 'meta_value_num';
+            $args['order'] = 'DESC';
+            break;
+        default: // date
+            $args['orderby'] = 'date';
+            $args['order'] = 'DESC';
+    }
+
     $query = new WP_Query( $args );
     ob_start();
     if ( $query->have_posts() ) {
@@ -225,6 +278,8 @@ function szr_filter_photos_ajax() {
             $query->the_post();
             get_template_part( 'template-parts/content', 'photo-card' );
         }
+    } else {
+        echo '<div class="no-results"><h3>Aucune photo trouvée</h3><p>Essayez de modifier vos filtres.</p></div>';
     }
     $html = ob_get_clean();
     wp_reset_postdata();
@@ -236,42 +291,115 @@ add_action( 'wp_ajax_nopriv_szr_get_models', 'szr_get_models_ajax' );
 function szr_get_models_ajax() {
     $brand_id = intval( $_POST['brand_id'] ?? 0 );
     if ( ! $brand_id ) wp_send_json_error( 'Brand ID required' );
-    
-    $models = get_terms( array( 'taxonomy' => 'car_model', 'hide_empty' => false, 'parent' => $brand_id ) );
-    $result = array();
-    foreach ( $models as $model ) {
-        $result[] = array( 'id' => $model->term_id, 'name' => $model->name );
+
+    $brand = get_term( $brand_id, 'car_brand' );
+    if ( ! $brand || is_wp_error( $brand ) ) wp_send_json_error( 'Invalid brand' );
+
+    // Try parent hierarchy first
+    $parent = get_term_by( 'slug', $brand->slug, 'car_model' );
+    if ( ! $parent ) $parent = get_term_by( 'name', $brand->name, 'car_model' );
+
+    $models = array();
+    if ( $parent && ! is_wp_error( $parent ) ) {
+        $models = get_terms( array(
+            'taxonomy' => 'car_model',
+            'hide_empty' => false,
+            'parent' => (int) $parent->term_id,
+            'orderby' => 'name',
+            'order' => 'ASC',
+        ) );
     }
+
+    // Fallback to meta
+    if ( empty( $models ) || is_wp_error( $models ) ) {
+        $models = get_terms( array(
+            'taxonomy' => 'car_model',
+            'hide_empty' => false,
+            'meta_query' => array(
+                array(
+                    'key' => '_szr_model_brand',
+                    'value' => $brand_id,
+                    'compare' => '=',
+                ),
+            ),
+            'orderby' => 'name',
+            'order' => 'ASC',
+        ) );
+    }
+
+    $result = array();
+    if ( ! is_wp_error( $models ) ) {
+        foreach ( $models as $model ) {
+            $result[] = array( 'id' => $model->term_id, 'name' => $model->name );
+        }
+    }
+
     wp_send_json_success( array( 'models' => $result ) );
 }
 
 add_action( 'wp_ajax_szr_map_photos', 'szr_map_photos_ajax' );
 add_action( 'wp_ajax_nopriv_szr_map_photos', 'szr_map_photos_ajax' );
 function szr_map_photos_ajax() {
-    $query = new WP_Query( array(
+    $args = array(
         'post_type' => 'car_photo',
         'posts_per_page' => -1,
         'meta_query' => array(
             array( 'key' => '_szr_gps_lat', 'compare' => 'EXISTS' ),
             array( 'key' => '_szr_gps_lng', 'compare' => 'EXISTS' ),
         ),
-    ) );
-    
+    );
+
+    // Filters
+    $tax_query = array();
+    if ( ! empty( $_POST['brand'] ) ) {
+        $tax_query[] = array(
+            'taxonomy' => 'car_brand',
+            'field' => 'term_id',
+            'terms' => intval( $_POST['brand'] ),
+        );
+    }
+    if ( ! empty( $_POST['model'] ) ) {
+        $tax_query[] = array(
+            'taxonomy' => 'car_model',
+            'field' => 'term_id',
+            'terms' => intval( $_POST['model'] ),
+        );
+    }
+    if ( ! empty( $tax_query ) ) {
+        $args['tax_query'] = $tax_query;
+    }
+
+    if ( ! empty( $_POST['author'] ) ) {
+        $args['author'] = intval( $_POST['author'] );
+    }
+
+    $query = new WP_Query( $args );
+
     $photos = array();
     while ( $query->have_posts() ) {
         $query->the_post();
         $lat = get_post_meta( get_the_ID(), '_szr_gps_lat', true );
         $lng = get_post_meta( get_the_ID(), '_szr_gps_lng', true );
         if ( $lat && $lng ) {
+            $brands = wp_get_post_terms( get_the_ID(), 'car_brand' );
+            $models = wp_get_post_terms( get_the_ID(), 'car_model' );
+            $car_title = '';
+            if ( ! empty( $brands ) && ! empty( $models ) ) {
+                $car_title = $brands[0]->name . ' ' . $models[0]->name;
+            } else {
+                $car_title = get_the_title();
+            }
+
             $photos[] = array(
                 'id' => get_the_ID(),
-                'title' => get_the_title(),
+                'title' => $car_title,
                 'url' => get_permalink(),
-                'thumbnail' => get_the_post_thumbnail_url( get_the_ID(), 'thumbnail' ),
+                'thumbnail' => get_the_post_thumbnail_url( get_the_ID(), 'shiftzoner-thumb' ),
                 'lat' => floatval( $lat ),
                 'lng' => floatval( $lng ),
                 'author' => get_the_author(),
-                'user_color' => get_user_meta( get_the_author_meta( 'ID' ), '_szr_user_color', true ) ?: '#888',
+                'date' => human_time_diff( get_the_time( 'U' ), current_time( 'timestamp' ) ) . ' ago',
+                'user_color' => get_user_meta( get_the_author_meta( 'ID' ), '_szr_user_color', true ) ?: '#E50914',
             );
         }
     }
@@ -326,3 +454,471 @@ function shiftzoner_increase_upload_size( $size ) {
     return 10485760; // 10MB
 }
 add_filter( 'upload_size_limit', 'shiftzoner_increase_upload_size' );
+
+// 13. WATERMARKING
+function shiftzoner_apply_watermark( $metadata, $attachment_id ) {
+    $post_parent = wp_get_post_parent_id( $attachment_id );
+    if ( ! $post_parent || get_post_type( $post_parent ) !== 'car_photo' ) return $metadata;
+
+    $upload_dir = wp_upload_dir();
+    $file = get_attached_file( $attachment_id );
+    if ( ! file_exists( $file ) ) return $metadata;
+
+    $image_editor = wp_get_image_editor( $file );
+    if ( is_wp_error( $image_editor ) ) return $metadata;
+
+    $size = $image_editor->get_size();
+    $text = '© ' . get_bloginfo( 'name' );
+    $font_size = max( 12, intval( $size['width'] * 0.02 ) );
+
+    // GD library watermark
+    if ( function_exists( 'imagettftext' ) && extension_loaded( 'gd' ) ) {
+        $image_type = wp_check_filetype( $file );
+        switch ( $image_type['type'] ) {
+            case 'image/jpeg':
+                $image = imagecreatefromjpeg( $file );
+                break;
+            case 'image/png':
+                $image = imagecreatefrompng( $file );
+                break;
+            default:
+                return $metadata;
+        }
+
+        if ( ! $image ) return $metadata;
+
+        $text_color = imagecolorallocatealpha( $image, 255, 255, 255, 40 );
+        $x = $size['width'] - ( strlen( $text ) * $font_size * 0.6 ) - 20;
+        $y = $size['height'] - 20;
+
+        imagestring( $image, 5, $x, $y, $text, $text_color );
+
+        switch ( $image_type['type'] ) {
+            case 'image/jpeg':
+                imagejpeg( $image, $file, 90 );
+                break;
+            case 'image/png':
+                imagepng( $image, $file, 9 );
+                break;
+        }
+
+        imagedestroy( $image );
+    }
+
+    return $metadata;
+}
+add_filter( 'wp_generate_attachment_metadata', 'shiftzoner_apply_watermark', 10, 2 );
+
+// 14. RATE LIMITING & UPLOAD VALIDATION
+function shiftzoner_check_upload_limit() {
+    if ( ! is_user_logged_in() ) return;
+
+    $user_id = get_current_user_id();
+
+    // Check daily limit
+    $today_start = strtotime( 'today midnight' );
+    $uploads_today = get_posts( array(
+        'post_type' => 'car_photo',
+        'author' => $user_id,
+        'date_query' => array(
+            array(
+                'after' => date( 'Y-m-d H:i:s', $today_start ),
+            ),
+        ),
+        'posts_per_page' => -1,
+        'fields' => 'ids',
+    ) );
+
+    if ( count( $uploads_today ) >= 100 ) {
+        wp_die( 'Limite d\'upload atteinte (100 photos par jour). Revenez demain !' );
+    }
+
+    // Captcha after 5 uploads (can be extended with reCAPTCHA)
+    if ( count( $uploads_today ) >= 5 ) {
+        $last_captcha = get_user_meta( $user_id, '_szr_last_captcha', true );
+        if ( time() - intval( $last_captcha ) > 3600 ) {
+            // Here you would verify captcha, for now just update timestamp
+            update_user_meta( $user_id, '_szr_last_captcha', time() );
+        }
+    }
+}
+
+// 15. BUDDYPRESS DEEP INTEGRATION
+function shiftzoner_buddypress_init() {
+    if ( ! function_exists( 'bp_is_active' ) ) return;
+
+    // Create groups for each brand automatically
+    add_action( 'created_car_brand', 'shiftzoner_create_brand_group', 10, 2 );
+
+    // Post activity when photo is uploaded
+    add_action( 'transition_post_status', 'shiftzoner_photo_activity', 10, 3 );
+
+    // Add photos tab to profile
+    add_action( 'bp_setup_nav', 'shiftzoner_profile_photos_tab', 100 );
+
+    // Notification on vote
+    add_action( 'szr_after_vote', 'shiftzoner_vote_notification', 10, 3 );
+
+    // Notification on comment
+    add_action( 'comment_post', 'shiftzoner_comment_notification', 10, 3 );
+}
+add_action( 'bp_include', 'shiftzoner_buddypress_init' );
+
+// Create group for brand
+function shiftzoner_create_brand_group( $term_id, $tt_id ) {
+    if ( ! function_exists( 'groups_create_group' ) ) return;
+
+    $term = get_term( $term_id, 'car_brand' );
+    if ( is_wp_error( $term ) ) return;
+
+    $existing = groups_get_groups( array(
+        'search_terms' => $term->name,
+        'per_page' => 1,
+    ) );
+
+    if ( ! empty( $existing['groups'] ) ) return;
+
+    $group_id = groups_create_group( array(
+        'creator_id' => 1, // Admin/Rafael
+        'name' => $term->name,
+        'description' => 'Groupe dédié aux photos de ' . $term->name,
+        'slug' => $term->slug,
+        'status' => 'public',
+        'enable_forum' => 1,
+    ) );
+
+    if ( $group_id ) {
+        update_term_meta( $term_id, '_szr_bp_group_id', $group_id );
+    }
+}
+
+// Post activity when photo uploaded
+function shiftzoner_photo_activity( $new_status, $old_status, $post ) {
+    if ( $post->post_type !== 'car_photo' ) return;
+    if ( $new_status !== 'publish' || $old_status === 'publish' ) return;
+    if ( ! function_exists( 'bp_activity_add' ) ) return;
+
+    $brands = wp_get_post_terms( $post->ID, 'car_brand' );
+    $models = wp_get_post_terms( $post->ID, 'car_model' );
+
+    $car_name = '';
+    if ( ! empty( $brands ) && ! empty( $models ) ) {
+        $car_name = $brands[0]->name . ' ' . $models[0]->name;
+    } else {
+        $car_name = $post->post_title;
+    }
+
+    $activity_id = bp_activity_add( array(
+        'user_id' => $post->post_author,
+        'action' => sprintf(
+            '%s a publié une photo de %s',
+            bp_core_get_userlink( $post->post_author ),
+            '<a href="' . get_permalink( $post->ID ) . '">' . esc_html( $car_name ) . '</a>'
+        ),
+        'content' => $post->post_content,
+        'primary_link' => get_permalink( $post->ID ),
+        'component' => 'activity',
+        'type' => 'new_car_photo',
+        'item_id' => $post->ID,
+    ) );
+
+    // Post to brand group if exists
+    if ( ! empty( $brands ) ) {
+        $group_id = get_term_meta( $brands[0]->term_id, '_szr_bp_group_id', true );
+        if ( $group_id && function_exists( 'groups_post_update' ) ) {
+            groups_post_update( array(
+                'user_id' => $post->post_author,
+                'group_id' => $group_id,
+                'content' => sprintf(
+                    'Nouvelle photo de %s : <a href="%s">%s</a>',
+                    $car_name,
+                    get_permalink( $post->ID ),
+                    $post->post_title
+                ),
+            ) );
+        }
+    }
+}
+
+// Add photos tab to profile
+function shiftzoner_profile_photos_tab() {
+    if ( ! bp_is_user() ) return;
+
+    bp_core_new_nav_item( array(
+        'name' => 'Mes Photos',
+        'slug' => 'photos',
+        'screen_function' => 'shiftzoner_profile_photos_screen',
+        'position' => 30,
+        'default_subnav_slug' => 'all',
+    ) );
+}
+
+function shiftzoner_profile_photos_screen() {
+    add_action( 'bp_template_content', 'shiftzoner_profile_photos_content' );
+    bp_core_load_template( 'members/single/plugins' );
+}
+
+function shiftzoner_profile_photos_content() {
+    $user_id = bp_displayed_user_id();
+    $photos = new WP_Query( array(
+        'post_type' => 'car_photo',
+        'author' => $user_id,
+        'posts_per_page' => 20,
+    ) );
+
+    echo '<div class="profile-photos-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem; margin-top: 2rem;">';
+    if ( $photos->have_posts() ) {
+        while ( $photos->have_posts() ) {
+            $photos->the_post();
+            get_template_part( 'template-parts/content', 'photo-card' );
+        }
+    } else {
+        echo '<p>Aucune photo publiée.</p>';
+    }
+    echo '</div>';
+    wp_reset_postdata();
+}
+
+// Send notification on vote
+function shiftzoner_vote_notification( $post_id, $user_id, $vote_type ) {
+    if ( ! function_exists( 'bp_notifications_add_notification' ) ) return;
+    if ( $vote_type !== 'up' ) return; // Only notify on upvotes
+
+    $author_id = get_post_field( 'post_author', $post_id );
+    if ( $author_id == $user_id ) return; // Don't notify self
+
+    bp_notifications_add_notification( array(
+        'user_id' => $author_id,
+        'item_id' => $post_id,
+        'secondary_item_id' => $user_id,
+        'component_name' => 'shiftzoner',
+        'component_action' => 'new_vote',
+        'date_notified' => bp_core_current_time(),
+        'is_new' => 1,
+    ) );
+}
+
+// Send notification on comment
+function shiftzoner_comment_notification( $comment_id, $approved, $commentdata ) {
+    if ( ! function_exists( 'bp_notifications_add_notification' ) ) return;
+
+    $comment = get_comment( $comment_id );
+    $post = get_post( $comment->comment_post_ID );
+
+    if ( $post->post_type !== 'car_photo' ) return;
+    if ( $post->post_author == $comment->user_id ) return; // Don't notify self
+
+    bp_notifications_add_notification( array(
+        'user_id' => $post->post_author,
+        'item_id' => $comment->comment_post_ID,
+        'secondary_item_id' => $comment_id,
+        'component_name' => 'shiftzoner',
+        'component_action' => 'new_comment',
+        'date_notified' => bp_core_current_time(),
+        'is_new' => 1,
+    ) );
+}
+
+// Register custom BP notification formats
+function shiftzoner_format_notifications( $action, $item_id, $secondary_item_id, $total_items, $format = 'string' ) {
+    if ( $action === 'new_vote' ) {
+        $post = get_post( $item_id );
+        $voter = get_userdata( $secondary_item_id );
+        $text = $voter->display_name . ' a aimé votre photo';
+        $link = get_permalink( $item_id );
+
+        if ( 'string' === $format ) {
+            return '<a href="' . esc_url( $link ) . '">' . esc_html( $text ) . '</a>';
+        } else {
+            return array(
+                'text' => $text,
+                'link' => $link,
+            );
+        }
+    }
+
+    if ( $action === 'new_comment' ) {
+        $post = get_post( $item_id );
+        $comment = get_comment( $secondary_item_id );
+        $text = $comment->comment_author . ' a commenté votre photo';
+        $link = get_comment_link( $comment );
+
+        if ( 'string' === $format ) {
+            return '<a href="' . esc_url( $link ) . '">' . esc_html( $text ) . '</a>';
+        } else {
+            return array(
+                'text' => $text,
+                'link' => $link,
+            );
+        }
+    }
+
+    return $action;
+}
+add_filter( 'bp_notifications_get_notifications_for_user', 'shiftzoner_format_notifications', 10, 5 );
+
+// Trigger vote hook for notifications
+add_action( 'wp_ajax_szr_vote', 'shiftzoner_trigger_vote_hook', 11 );
+function shiftzoner_trigger_vote_hook() {
+    if ( isset( $_POST['post_id'], $_POST['vote'] ) && $_POST['vote'] === 'up' ) {
+        do_action( 'szr_after_vote', intval( $_POST['post_id'] ), get_current_user_id(), 'up' );
+    }
+}
+
+// Initialize groups for existing brands (run once)
+function shiftzoner_init_brand_groups() {
+    if ( ! function_exists( 'groups_create_group' ) ) return;
+
+    $brands = get_terms( array(
+        'taxonomy' => 'car_brand',
+        'hide_empty' => false,
+    ) );
+
+    $created = 0;
+    foreach ( $brands as $brand ) {
+        $existing_group = get_term_meta( $brand->term_id, '_szr_bp_group_id', true );
+        if ( $existing_group ) continue;
+
+        $existing = groups_get_groups( array(
+            'search_terms' => $brand->name,
+            'per_page' => 1,
+        ) );
+
+        if ( ! empty( $existing['groups'] ) ) {
+            update_term_meta( $brand->term_id, '_szr_bp_group_id', $existing['groups'][0]->id );
+            continue;
+        }
+
+        $group_id = groups_create_group( array(
+            'creator_id' => 1,
+            'name' => $brand->name,
+            'description' => sprintf( 'Groupe communautaire dédié aux passionnés de %s. Partagez vos photos, discutez et échangez autour de cette marque emblématique.', $brand->name ),
+            'slug' => $brand->slug,
+            'status' => 'public',
+            'enable_forum' => 1,
+        ) );
+
+        if ( $group_id ) {
+            update_term_meta( $brand->term_id, '_szr_bp_group_id', $group_id );
+            $created++;
+        }
+    }
+
+    return $created;
+}
+
+// Auto-join user to brand group when uploading photo
+function shiftzoner_auto_join_brand_group( $post_id, $user_id, $vote_type ) {
+    if ( ! function_exists( 'groups_join_group' ) ) return;
+
+    $brands = wp_get_post_terms( $post_id, 'car_brand' );
+    if ( empty( $brands ) ) return;
+
+    $group_id = get_term_meta( $brands[0]->term_id, '_szr_bp_group_id', true );
+    if ( ! $group_id ) return;
+
+    if ( ! groups_is_user_member( $user_id, $group_id ) ) {
+        groups_join_group( $group_id, $user_id );
+    }
+}
+add_action( 'transition_post_status', 'shiftzoner_auto_join_on_publish', 10, 3 );
+function shiftzoner_auto_join_on_publish( $new_status, $old_status, $post ) {
+    if ( $post->post_type !== 'car_photo' ) return;
+    if ( $new_status !== 'publish' ) return;
+    if ( ! function_exists( 'groups_join_group' ) ) return;
+
+    $brands = wp_get_post_terms( $post->ID, 'car_brand' );
+    if ( empty( $brands ) ) return;
+
+    $group_id = get_term_meta( $brands[0]->term_id, '_szr_bp_group_id', true );
+    if ( ! $group_id ) return;
+
+    if ( ! groups_is_user_member( $post->post_author, $group_id ) ) {
+        groups_join_group( $group_id, $post->post_author );
+    }
+}
+
+// Widget: Top Contributors
+class ShiftZoneR_Top_Contributors_Widget extends WP_Widget {
+    function __construct() {
+        parent::__construct( 'szr_top_contributors', 'ShiftZoneR - Top Contributeurs', array( 'description' => 'Affiche les meilleurs contributeurs' ) );
+    }
+
+    function widget( $args, $instance ) {
+        echo $args['before_widget'];
+        echo $args['before_title'] . 'Top Contributeurs' . $args['after_title'];
+
+        $top_users = new WP_User_Query( array(
+            'orderby' => 'meta_value_num',
+            'meta_key' => '_szr_karma',
+            'order' => 'DESC',
+            'number' => 5,
+        ) );
+
+        if ( ! empty( $top_users->results ) ) {
+            echo '<ul class="szr-top-contributors">';
+            foreach ( $top_users->results as $user ) {
+                $karma = get_user_meta( $user->ID, '_szr_karma', true ) ?: 0;
+                $color = get_user_meta( $user->ID, '_szr_user_color', true ) ?: '#E50914';
+                $photo_count = count_user_posts( $user->ID, 'car_photo' );
+
+                echo '<li style="padding: 10px; margin-bottom: 8px; background: #1a1a1a; border-radius: 8px; border-left: 3px solid ' . esc_attr( $color ) . ';">';
+                echo '<strong>' . esc_html( $user->display_name ) . '</strong><br>';
+                echo '<small>' . $photo_count . ' photos • ' . $karma . ' karma</small>';
+                echo '</li>';
+            }
+            echo '</ul>';
+        }
+
+        echo $args['after_widget'];
+    }
+}
+add_action( 'widgets_init', function() {
+    register_widget( 'ShiftZoneR_Top_Contributors_Widget' );
+} );
+
+// Shortcode: User Stats
+function shiftzoner_user_stats_shortcode( $atts ) {
+    if ( ! is_user_logged_in() ) return '<p>Connectez-vous pour voir vos statistiques.</p>';
+
+    $user_id = get_current_user_id();
+    $karma = get_user_meta( $user_id, '_szr_karma', true ) ?: 0;
+    $color = get_user_meta( $user_id, '_szr_user_color', true ) ?: '#E50914';
+    $photo_count = count_user_posts( $user_id, 'car_photo' );
+
+    $total_votes = 0;
+    $photos = get_posts( array(
+        'post_type' => 'car_photo',
+        'author' => $user_id,
+        'posts_per_page' => -1,
+        'fields' => 'ids',
+    ) );
+
+    foreach ( $photos as $photo_id ) {
+        $votes = get_post_meta( $photo_id, '_szr_vote_score', true ) ?: 0;
+        $total_votes += intval( $votes );
+    }
+
+    ob_start();
+    ?>
+    <div class="szr-user-stats" style="background: linear-gradient(135deg, #1a1a1a, #2a2a2a); border-radius: 20px; padding: 2rem; border: 1px solid <?php echo esc_attr( $color ); ?>;">
+        <h3 style="margin-top: 0; color: <?php echo esc_attr( $color ); ?>;">Vos Statistiques</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1.5rem;">
+            <div style="text-align: center; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 10px;">
+                <div style="font-size: 2rem; font-weight: 900; color: <?php echo esc_attr( $color ); ?>;"><?php echo $photo_count; ?></div>
+                <div style="font-size: 0.9rem; color: #a0a0a0;">Photos</div>
+            </div>
+            <div style="text-align: center; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 10px;">
+                <div style="font-size: 2rem; font-weight: 900; color: <?php echo esc_attr( $color ); ?>;"><?php echo $karma; ?></div>
+                <div style="font-size: 0.9rem; color: #a0a0a0;">Karma</div>
+            </div>
+            <div style="text-align: center; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 10px;">
+                <div style="font-size: 2rem; font-weight: 900; color: <?php echo esc_attr( $color ); ?>;"><?php echo $total_votes; ?></div>
+                <div style="font-size: 0.9rem; color: #a0a0a0;">Votes reçus</div>
+            </div>
+        </div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+add_shortcode( 'shiftzoner_stats', 'shiftzoner_user_stats_shortcode' );

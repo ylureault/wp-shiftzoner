@@ -131,6 +131,30 @@ if ( ! is_user_logged_in() ){
     get_footer(); return;
 }
 
+/* ====== vérification limite upload ====== */
+$user_id = get_current_user_id();
+$today_start = strtotime( 'today midnight' );
+$uploads_today = get_posts( array(
+    'post_type'      => 'car_photo',
+    'author'         => $user_id,
+    'date_query'     => array( array( 'after' => date( 'Y-m-d H:i:s', $today_start ) ) ),
+    'posts_per_page' => -1,
+    'fields'         => 'ids',
+) );
+$upload_count = count( $uploads_today );
+$upload_limit = 100;
+
+if ( $upload_count >= $upload_limit ) {
+    echo '<div class="szr-wrap">';
+    echo '<div class="szr-card">';
+    echo '<h1 class="szr-title">⚠️ Limite atteinte</h1>';
+    echo '<p>Vous avez atteint votre limite quotidienne de <strong>' . $upload_limit . ' photos</strong>.</p>';
+    echo '<p>Votre compteur sera réinitialisé demain. Revenez alors pour partager plus de photos !</p>';
+    echo '<p><a href="' . home_url() . '" class="szr-button">Retour à l\'accueil</a></p>';
+    echo '</div></div>';
+    get_footer(); return;
+}
+
 /* ====== traitement POST ====== */
 $errors = [];
 $created_post_id = 0;
@@ -272,7 +296,14 @@ foreach ($brands as $b){
 <div class="szr-wrap">
   <div class="szr-card">
     <h1 class="szr-title">publier une photo</h1>
-    <p class="szr-sub">sélectionne d’abord la marque (le logo s’affiche), puis choisis le modèle associé.</p>
+    <p class="szr-sub">sélectionne d'abord la marque (le logo s'affiche), puis choisis le modèle associé.</p>
+
+    <?php if ( $upload_count > 0 ): ?>
+      <div style="background: rgba(0, 174, 239, 0.1); border: 1px solid rgba(0, 174, 239, 0.3); border-radius: 10px; padding: 12px; margin-bottom: 16px;">
+        📊 Vous avez publié <strong><?php echo $upload_count; ?></strong> photo<?php echo $upload_count > 1 ? 's' : ''; ?> aujourd'hui.
+        (<?php echo ($upload_limit - $upload_count); ?> restantes)
+      </div>
+    <?php endif; ?>
 
     <?php if (!empty($errors)): ?>
       <div class="szr-alert">

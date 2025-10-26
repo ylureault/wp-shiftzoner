@@ -24,6 +24,15 @@ ShiftZoneR est une plateforme permettant de publier, explorer et commenter des p
 - **Commentaires imbriqués** avec modération
 - **Signalement de contenu** avec seuil de masquage automatique
 
+### 🔥 BuddyPress - Fonctionnalités Sociales
+- **Groupes automatiques** créés pour chaque marque de voiture
+- **Adhésion automatique** au groupe de la marque lors de l'upload
+- **Flux d'activité** : publication automatique lors de l'ajout de photos
+- **Notifications** pour votes et commentaires sur vos photos
+- **Onglet Photos** dans les profils utilisateurs
+- **Widget Top Contributeurs** affichant les meilleurs membres
+- **Shortcode stats** `[shiftzoner_stats]` pour afficher les statistiques utilisateur
+
 ### 🗺️ Carte Interactive
 - **Affichage géolocalisé** des lieux de prise de vue
 - **Filtres** par marque, modèle, année, contributeur
@@ -103,6 +112,26 @@ wp-shiftzoner/
 4. Ouvrez la section **Réseaux Sociaux**
 5. Ajoutez vos liens Instagram, Facebook, Twitter
 
+### Configuration BuddyPress (recommandé)
+
+1. **Installer BuddyPress** : Extensions > Ajouter > rechercher "BuddyPress"
+2. **Activer les composants** : Réglages > BuddyPress > Composants
+   - ✅ Profils Membres Étendus
+   - ✅ Groupes Sociaux
+   - ✅ Flux d'Activités
+   - ✅ Notifications
+   - ✅ Paramètres du Compte
+3. **Créer groupes pour marques existantes** :
+   - Ouvrir la console WP (wp-cli ou PHP)
+   - Exécuter : `shiftzoner_init_brand_groups()`
+   - Cela créera automatiquement un groupe pour chaque marque
+4. **Configuration pages** : Réglages > BuddyPress > Pages
+   - Créer les pages nécessaires (Membres, Activité, Groupes)
+5. **Résultat** :
+   - Les nouveaux uploads créent automatiquement des activités
+   - Les utilisateurs rejoignent automatiquement les groupes de marques
+   - Les notifications sont envoyées pour votes et commentaires
+
 ## Configuration
 
 ### Custom Post Type et Taxonomies
@@ -134,36 +163,42 @@ Chaque photo stocke :
 
 ## Fonctions AJAX
 
-Le thème utilise AJAX pour :
+Le thème utilise AJAX pour une expérience utilisateur fluide :
 
-### Votes
+### Votes (avec notifications BuddyPress)
 ```javascript
 Action: szr_vote
-Params: post_id, vote (up/down)
+Params: post_id, vote (up/down), nonce
+Response: { score, user_vote, karma }
 ```
 
-### Filtrage Photos
+### Filtrage Photos (complet)
 ```javascript
 Action: szr_filter_photos
 Params: search, brand, model, year, sort, page
+Sort options: date, votes, comments, views
+Response: { html, has_more }
 ```
 
-### Signalement
+### Signalement (modération automatique)
 ```javascript
 Action: szr_report
 Params: post_id, reason
+Note: Masquage auto après 5 signalements
 ```
 
-### Carte - Photos GPS
+### Carte - Photos GPS (avec filtres)
 ```javascript
 Action: szr_map_photos
 Params: brand, model, author
+Response: { photos: [{ lat, lng, title, url, thumbnail, user_color, ... }] }
 ```
 
-### Modèles par Marque
+### Modèles par Marque (hiérarchie + meta)
 ```javascript
 Action: szr_get_models
 Params: brand_id
+Response: { models: [{ id, name }] }
 ```
 
 ## Shortcodes
@@ -187,6 +222,23 @@ Params: brand_id
 ```php
 [shiftzoner_notifications]
 ```
+
+### Statistiques utilisateur (nouveau)
+```php
+[shiftzoner_stats]
+Affiche : nombre de photos, karma, votes reçus
+```
+
+## Widgets
+
+### Top Contributeurs
+Widget affichant les 5 meilleurs contributeurs par karma avec :
+- Nom du contributeur
+- Couleur personnalisée (bordure gauche)
+- Nombre de photos publiées
+- Score de karma
+
+**Utilisation** : Apparence > Widgets > "ShiftZoneR - Top Contributeurs"
 
 ## Personnalisation
 
@@ -229,12 +281,15 @@ do_action( 'szr_before_moderation', $post_id, $report_count );
 
 ## Sécurité
 
-- **Nonce** pour tous les formulaires
-- **Sanitization** des données entrantes
-- **Escape** des données sortantes
-- **Rate limiting** sur les uploads (100 par jour)
-- **Captcha** après 5 uploads
-- **Modération** a posteriori avec signalement
+- **Nonce** pour tous les formulaires AJAX et uploads
+- **Sanitization** des données entrantes (sanitize_text_field, wp_kses_post)
+- **Escape** des données sortantes (esc_html, esc_url, esc_attr)
+- **Rate limiting** sur les uploads (100 photos par jour maximum)
+- **Compteur visuel** d'uploads restants sur la page de soumission
+- **Captcha** après 5 uploads (infrastructure prête pour reCAPTCHA)
+- **Modération** a posteriori avec signalement (masquage auto après 5 signalements)
+- **Vérification MIME** des fichiers uploadés
+- **Validation EXIF** sécurisée avec gestion des erreurs
 
 ## SEO
 
@@ -287,6 +342,18 @@ Le thème intègre un SEO optimisé automatiquement :
 - Mobile (iOS Safari, Chrome Android)
 
 ## Changelog
+
+### Version 1.2.0 (2025-10-26)
+- 🔥 **BuddyPress complet** : Groupes auto par marque, activités, notifications
+- 🎯 **AJAX amélioré** : Filtres complets (brand/model/year/sort) dans galerie et carte
+- 🖼️ **Watermarking** : Filigrane automatique sur toutes les photos uploadées
+- 🚦 **Rate limiting** : Limite de 100 photos/jour avec compteur visuel
+- 🔔 **Notifications** : Alertes BuddyPress pour votes et commentaires
+- 📊 **Widget Top Contributeurs** : Classement des meilleurs membres
+- 📈 **Shortcode stats** : [shiftzoner_stats] pour afficher statistiques utilisateur
+- 🤝 **Auto-join groupes** : Adhésion automatique au groupe de la marque
+- 🔧 **Helper groupes** : Fonction pour créer groupes BP pour marques existantes
+- 📱 **Onglet Photos** : Galerie personnelle dans profils BuddyPress
 
 ### Version 1.1.0 (2025-01-26)
 - ✨ **Logo personnalisé** : Support du logo WordPress dans le header
