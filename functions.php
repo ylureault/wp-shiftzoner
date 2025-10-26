@@ -449,13 +449,14 @@ function szr_search_brands_ajax() {
 
     if ( ! is_wp_error( $brands ) ) {
         foreach ( $brands as $brand ) {
-            $logo = get_term_meta( $brand->term_id, 'brand_logo', true );
+            $logo_id = get_term_meta( $brand->term_id, '_szr_brand_logo_id', true );
+            $logo_url = $logo_id ? wp_get_attachment_image_url( $logo_id, 'medium' ) : '';
             $results[] = array(
                 'type'  => 'brand',
                 'id'    => $brand->term_id,
                 'name'  => $brand->name,
                 'count' => $brand->count,
-                'logo'  => $logo ?: '',
+                'logo'  => $logo_url,
             );
         }
     }
@@ -504,7 +505,8 @@ function szr_get_brand_models_ajax() {
     }
 
     // Get brand info
-    $brand_logo = get_term_meta( $brand_id, 'brand_logo', true );
+    $brand_logo_id = get_term_meta( $brand_id, '_szr_brand_logo_id', true );
+    $brand_logo = $brand_logo_id ? wp_get_attachment_image_url( $brand_logo_id, 'medium' ) : '';
     $brand_description = term_description( $brand_id, 'car_brand' );
 
     // Get models for this brand

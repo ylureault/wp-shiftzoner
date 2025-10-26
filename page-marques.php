@@ -292,10 +292,11 @@ $total_photos = wp_count_posts( 'car_photo' )->publish;
             })
             .then(res => res.json())
             .then(data => {
-                if (data.success) {
-                    displaySearchResults(data.data);
+                if (data.success && data.data.results) {
+                    displaySearchResults(data.data.results);
                 }
-            });
+            })
+            .catch(err => console.error('Search error:', err));
         }, 300);
     });
 

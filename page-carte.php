@@ -13,8 +13,20 @@ get_header();
 <div class="map-page">
     <div class="map-header">
         <div class="container">
-            <h1 class="map-title">Carte Interactive</h1>
-            <p class="map-subtitle">Explorez les lieux de prise de vue des photos ShiftZoneR</p>
+            <div class="map-header-content">
+                <div>
+                    <h1 class="map-title">Carte Interactive</h1>
+                    <p class="map-subtitle">Explorez les lieux de prise de vue des photos ShiftZoneR</p>
+                </div>
+                <?php if ( is_user_logged_in() ) : ?>
+                <a href="<?php echo esc_url( home_url( '/soumettre-photo/' ) ); ?>" class="map-upload-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                    </svg>
+                    Publier une photo
+                </a>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 
@@ -119,59 +131,95 @@ get_header();
 
 <script>
 (function() {
+    console.log('=== Initialisation page carte ===');
+
     // Vérifier que Leaflet est chargé
     if (typeof L === 'undefined') {
-        console.error('Leaflet n\'est pas chargé');
+        console.error('ERREUR: Leaflet n\'est pas chargé - vérifier functions.php');
+        const mapEl = document.getElementById('shiftzoner-map');
+        if (mapEl) {
+            mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;padding:2rem;text-align:center;"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom:1rem;opacity:0.5;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><h3 style="color:var(--text);margin-bottom:0.5rem;">Erreur de chargement</h3><p style="color:var(--text-muted);">La bibliothèque Leaflet n\'est pas disponible</p></div>';
+        }
         document.getElementById('photos-count').textContent = 'Erreur: Leaflet non disponible';
         return;
     }
 
+    console.log('✓ Leaflet chargé, version:', L.version);
+
     // Variables
-    let map;
+    let map = null;
     let markers = [];
     let photosData = [];
 
     // Initialiser la carte
     function initMap() {
+        console.log('Initialisation de la carte...');
+
         // Centre de la France par défaut
         const defaultCenter = [46.603354, 1.888334];
         const defaultZoom = 6;
 
         try {
+            const mapElement = document.getElementById('shiftzoner-map');
+            if (!mapElement) {
+                throw new Error('Élément #shiftzoner-map introuvable');
+            }
+
+            console.log('Création de la carte Leaflet...');
             map = L.map('shiftzoner-map', {
                 center: defaultCenter,
                 zoom: defaultZoom,
                 zoomControl: false
             });
 
+            console.log('✓ Carte créée');
+
             // Ajouter les tuiles OpenStreetMap
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            console.log('Chargement des tuiles OpenStreetMap...');
+            const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                 maxZoom: 19,
                 minZoom: 3
-            }).addTo(map);
+            });
+
+            tileLayer.on('tileerror', (error) => {
+                console.warn('Erreur chargement tuile:', error);
+            });
+
+            tileLayer.addTo(map);
+            console.log('✓ Tuiles ajoutées');
 
             // Ajouter le contrôle de zoom
             L.control.zoom({
                 position: 'topright'
             }).addTo(map);
 
-            console.log('Carte initialisée avec succès');
+            console.log('✓ Carte initialisée avec succès');
 
             // Charger les photos avec GPS
             loadMapPhotos();
         } catch (error) {
-            console.error('Erreur lors de l\'initialisation de la carte:', error);
+            console.error('ERREUR lors de l\'initialisation de la carte:', error);
             document.getElementById('photos-count').textContent = 'Erreur d\'initialisation';
+            const mapEl = document.getElementById('shiftzoner-map');
+            if (mapEl) {
+                mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;padding:2rem;text-align:center;"><div><h3 style="color:var(--text);">Erreur d\'initialisation</h3><p style="color:var(--text-muted);">' + error.message + '</p></div></div>';
+            }
         }
     }
 
     // Charger les photos
     function loadMapPhotos() {
+        if (!map) {
+            console.error('Carte non initialisée');
+            return;
+        }
+
         const brandId = document.getElementById('map-brand-filter').value;
         const modelId = document.getElementById('map-model-filter').value;
         const authorId = document.getElementById('map-author-filter').value;
 
+        console.log('Chargement photos - Filtres:', {brand: brandId, model: modelId, author: authorId});
         document.getElementById('photos-count').textContent = 'Chargement...';
 
         fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
@@ -181,20 +229,28 @@ get_header();
             },
             body: `action=szr_map_photos&brand=${brandId}&model=${modelId}&author=${authorId}`
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
-            console.log('Données reçues:', data);
+            console.log('Réponse AJAX:', data);
             if (data.success && data.data && data.data.photos) {
                 photosData = data.data.photos;
+                console.log(`✓ ${photosData.length} photo(s) chargée(s)`);
                 updateMarkers();
                 updateStats();
             } else {
-                console.error('Erreur dans les données:', data);
-                document.getElementById('photos-count').textContent = '0 photo';
+                console.warn('Aucune photo trouvée ou erreur:', data);
+                photosData = [];
+                updateMarkers();
+                updateStats();
             }
         })
         .catch(error => {
-            console.error('Erreur lors du chargement des photos:', error);
+            console.error('ERREUR lors du chargement des photos:', error);
             document.getElementById('photos-count').textContent = 'Erreur de chargement';
         });
     }
