@@ -1,372 +1,469 @@
 <?php
 /**
  * Template Name: Marques & Modèles
- * Description: Page recensant toutes les marques et modèles avec logos, navigation fluide et SEO optimisé
- * Version: 2.0.0 - Refactored
+ * Description: Page mémorable avec AJAX, animations et expérience fluide
+ * Version: 3.0.0 - Memorable Experience
  *
  * @package ShiftZoneR
  */
 
 get_header();
 
-// Récupérer les paramètres d'URL
-$current_brand_slug = isset( $_GET['brand'] ) ? sanitize_title( $_GET['brand'] ) : '';
-$current_model_slug = isset( $_GET['model'] ) ? sanitize_title( $_GET['model'] ) : '';
-$search_query       = isset( $_GET['s'] ) ? sanitize_text_field( $_GET['s'] ) : '';
+// Récupérer toutes les marques pour la vue initiale
+$brands = get_terms( array(
+    'taxonomy'   => 'car_brand',
+    'hide_empty' => false,
+    'orderby'    => 'name',
+    'order'      => 'ASC',
+) );
 
-// Déterminer la vue actuelle
-$current_view = 'brands'; // Par défaut : liste des marques
-$current_brand = null;
-$current_model = null;
-
-if ( $current_brand_slug ) {
-    $current_brand = get_term_by( 'slug', $current_brand_slug, 'car_brand' );
-    if ( $current_brand && ! is_wp_error( $current_brand ) ) {
-        $current_view = 'models'; // Vue modèles d'une marque
-
-        if ( $current_model_slug ) {
-            $current_model = get_term_by( 'slug', $current_model_slug, 'car_model' );
-            if ( $current_model && ! is_wp_error( $current_model ) ) {
-                $current_view = 'photos'; // Vue photos d'un modèle
-            }
-        }
-    }
-}
-
-// SEO selon la vue
-$page_title = '';
-$page_description = '';
-
-if ( $current_view === 'photos' && $current_model ) {
-    $page_title = $current_brand->name . ' ' . $current_model->name . ' - Photos';
-    $page_description = 'Découvrez toutes les photos de ' . $current_brand->name . ' ' . $current_model->name . ' partagées sur ShiftZoneR.';
-} elseif ( $current_view === 'models' && $current_brand ) {
-    $page_title = 'Modèles ' . $current_brand->name;
-    $page_description = 'Explorez tous les modèles ' . $current_brand->name . ' avec photos de la communauté ShiftZoneR.';
-} else {
-    $page_title = 'Marques Automobiles';
-    $page_description = 'Découvrez toutes les marques automobiles et leurs modèles sur ShiftZoneR.';
-}
+$total_photos = wp_count_posts( 'car_photo' )->publish;
 ?>
 
-<!-- SEO Meta Tags -->
-<?php if ( $current_view !== 'brands' ) : ?>
-<meta name="description" content="<?php echo esc_attr( $page_description ); ?>">
-<meta property="og:title" content="<?php echo esc_attr( $page_title . ' - ' . get_bloginfo( 'name' ) ); ?>">
-<meta property="og:description" content="<?php echo esc_attr( $page_description ); ?>">
-<meta property="og:type" content="website">
-<meta name="twitter:card" content="summary_large_image">
-<?php endif; ?>
-
-<div class="brands-page">
-    <!-- Breadcrumb Navigation -->
-    <div class="brands-breadcrumb">
+<div class="brands-page" id="brands-app">
+    <!-- Hero Header avec effet parallaxe -->
+    <div class="brands-hero">
+        <div class="hero-bg"></div>
         <div class="container">
-            <nav aria-label="Fil d'Ariane">
-                <a href="<?php echo esc_url( home_url( '/' ) ); ?>">Accueil</a>
-                <span class="separator">/</span>
+            <h1 class="hero-title" data-animate="fade-up">
+                Explorez les Marques Automobiles
+            </h1>
+            <p class="hero-subtitle" data-animate="fade-up" data-delay="100">
+                <?php echo count( $brands ); ?> marques • <?php echo number_format( $total_photos ); ?> photos • La passion automobile
+            </p>
 
-                <?php if ( $current_view === 'brands' ) : ?>
-                    <span class="current">Marques</span>
+            <!-- Recherche en temps réel -->
+            <div class="hero-search" data-animate="fade-up" data-delay="200">
+                <div class="search-box">
+                    <svg class="search-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                    </svg>
+                    <input
+                        type="text"
+                        id="live-search"
+                        placeholder="Rechercher une marque ou un modèle..."
+                        autocomplete="off"
+                    >
+                    <div id="search-results" class="search-results"></div>
+                </div>
+            </div>
 
-                <?php elseif ( $current_view === 'models' && $current_brand ) : ?>
-                    <a href="<?php echo esc_url( get_permalink() ); ?>">Marques</a>
-                    <span class="separator">/</span>
-                    <span class="current"><?php echo esc_html( $current_brand->name ); ?></span>
-
-                <?php elseif ( $current_view === 'photos' && $current_brand && $current_model ) : ?>
-                    <a href="<?php echo esc_url( get_permalink() ); ?>">Marques</a>
-                    <span class="separator">/</span>
-                    <a href="<?php echo esc_url( add_query_arg( 'brand', $current_brand->slug, get_permalink() ) ); ?>"><?php echo esc_html( $current_brand->name ); ?></a>
-                    <span class="separator">/</span>
-                    <span class="current"><?php echo esc_html( $current_model->name ); ?></span>
-                <?php endif; ?>
-            </nav>
-        </div>
-    </div>
-
-    <!-- Header Section -->
-    <div class="brands-header">
-        <div class="container">
-            <h1 class="page-title fade-in"><?php echo esc_html( $page_title ); ?></h1>
-            <p class="page-description fade-in"><?php echo esc_html( $page_description ); ?></p>
-
-            <!-- Recherche -->
-            <div class="brands-search fade-in">
-                <form method="get" action="<?php echo esc_url( get_permalink() ); ?>" class="search-form">
-                    <?php if ( $current_brand_slug ) : ?>
-                        <input type="hidden" name="brand" value="<?php echo esc_attr( $current_brand_slug ); ?>">
-                    <?php endif; ?>
-                    <?php if ( $current_model_slug ) : ?>
-                        <input type="hidden" name="model" value="<?php echo esc_attr( $current_model_slug ); ?>">
-                    <?php endif; ?>
-                    <input type="text" name="s" placeholder="🔍 Rechercher une marque, un modèle..." value="<?php echo esc_attr( $search_query ); ?>" class="search-input">
-                    <button type="submit" class="search-button">Rechercher</button>
-                </form>
+            <!-- Stats animées -->
+            <div class="hero-stats" data-animate="fade-up" data-delay="300">
+                <div class="stat-item">
+                    <span class="stat-number" data-count="<?php echo count( $brands ); ?>">0</span>
+                    <span class="stat-label">Marques</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" data-count="<?php echo wp_count_terms( 'car_model' ); ?>">0</span>
+                    <span class="stat-label">Modèles</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" data-count="<?php echo $total_photos; ?>">0</span>
+                    <span class="stat-label">Photos</span>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Contenu Principal -->
+    <!-- Breadcrumb -->
+    <div class="brands-breadcrumb">
+        <div class="container">
+            <nav id="breadcrumb-nav" aria-label="Fil d'Ariane">
+                <a href="<?php echo esc_url( home_url( '/' ) ); ?>">Accueil</a>
+                <span class="separator">/</span>
+                <span class="current">Marques</span>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Contenu dynamique -->
     <div class="brands-content">
         <div class="container">
+            <!-- Loading overlay -->
+            <div id="loading-overlay" class="loading-overlay" style="display:none;">
+                <div class="loading-spinner">
+                    <div class="spinner-ring"></div>
+                    <div class="spinner-ring"></div>
+                    <div class="spinner-ring"></div>
+                </div>
+                <p>Chargement...</p>
+            </div>
 
-            <?php if ( $current_view === 'brands' ) : ?>
-                <!-- ========== VUE: LISTE DES MARQUES ========== -->
-                <?php
-                $brands = get_terms( array(
-                    'taxonomy'   => 'car_brand',
-                    'hide_empty' => false,
-                    'orderby'    => 'name',
-                    'order'      => 'ASC',
-                ) );
-
-                if ( $search_query ) {
-                    $brands = array_filter( $brands, function( $brand ) use ( $search_query ) {
-                        return stripos( $brand->name, $search_query ) !== false;
-                    } );
-                }
-
-                if ( ! empty( $brands ) && ! is_wp_error( $brands ) ) :
-                    ?>
-                    <div class="brands-grid">
-                        <?php foreach ( $brands as $brand ) :
-                            $logo = get_term_meta( $brand->term_id, '_szr_brand_logo_id', true );
-                            $logo_url = $logo ? wp_get_attachment_image_url( $logo, 'medium' ) : '';
-                            $photo_count = $brand->count;
-                            ?>
-                            <a href="<?php echo esc_url( add_query_arg( 'brand', $brand->slug, get_permalink() ) ); ?>" class="brand-card fade-in">
-                                <div class="brand-logo">
-                                    <?php if ( $logo_url ) : ?>
-                                        <img src="<?php echo esc_url( $logo_url ); ?>" alt="Logo <?php echo esc_attr( $brand->name ); ?>" loading="lazy">
-                                    <?php else : ?>
-                                        <div class="brand-logo-placeholder">
-                                            <span><?php echo esc_html( substr( $brand->name, 0, 1 ) ); ?></span>
-                                        </div>
-                                    <?php endif; ?>
-                                </div>
-                                <div class="brand-info">
-                                    <h3 class="brand-name"><?php echo esc_html( $brand->name ); ?></h3>
-                                    <p class="brand-count"><?php echo esc_html( $photo_count ); ?> photo<?php echo $photo_count > 1 ? 's' : ''; ?></p>
-                                </div>
-                                <div class="brand-arrow">→</div>
-                            </a>
-                        <?php endforeach; ?>
+            <!-- Vue marques (par défaut) -->
+            <div id="brands-view" class="view-container">
+                <div class="view-header">
+                    <h2 class="view-title">Toutes les marques</h2>
+                    <div class="view-controls">
+                        <button id="grid-view" class="view-btn active" title="Vue grille">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M4 11h5V5H4v6zm0 7h5v-6H4v6zm6 0h5v-6h-5v6zm6 0h5v-6h-5v6zm-6-7h5V5h-5v6zm6-6v6h5V5h-5z"/>
+                            </svg>
+                        </button>
+                        <button id="list-view" class="view-btn" title="Vue liste">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/>
+                            </svg>
+                        </button>
                     </div>
-                <?php else : ?>
-                    <div class="no-results">
-                        <h3>Aucune marque trouvée</h3>
-                        <p>Essayez une autre recherche ou <a href="<?php echo esc_url( get_permalink() ); ?>">voir toutes les marques</a>.</p>
-                    </div>
-                <?php endif; ?>
-
-            <?php elseif ( $current_view === 'models' && $current_brand ) : ?>
-                <!-- ========== VUE: MODÈLES D'UNE MARQUE ========== -->
-
-                <!-- En-tête de la marque -->
-                <div class="brand-header">
-                    <?php
-                    $logo = get_term_meta( $current_brand->term_id, '_szr_brand_logo_id', true );
-                    $logo_url = $logo ? wp_get_attachment_image_url( $logo, 'large' ) : '';
-                    ?>
-                    <?php if ( $logo_url ) : ?>
-                        <div class="brand-header-logo">
-                            <img src="<?php echo esc_url( $logo_url ); ?>" alt="Logo <?php echo esc_attr( $current_brand->name ); ?>" loading="lazy">
-                        </div>
-                    <?php endif; ?>
-                    <h2><?php echo esc_html( $current_brand->name ); ?></h2>
-                    <?php if ( $current_brand->description ) : ?>
-                        <p class="brand-description"><?php echo esc_html( $current_brand->description ); ?></p>
-                    <?php endif; ?>
                 </div>
 
-                <?php
-                // Récupérer les modèles de cette marque
-                $models = get_terms( array(
-                    'taxonomy'   => 'car_model',
-                    'hide_empty' => false,
-                    'parent'     => $current_brand->term_id,
-                    'orderby'    => 'name',
-                    'order'      => 'ASC',
-                ) );
-
-                // Si pas de modèles en tant qu'enfants, chercher via meta
-                if ( empty( $models ) || is_wp_error( $models ) ) {
-                    $models = get_terms( array(
-                        'taxonomy'   => 'car_model',
-                        'hide_empty' => false,
-                        'meta_query' => array(
-                            array(
-                                'key'     => '_szr_model_brand',
-                                'value'   => $current_brand->term_id,
-                                'compare' => '=',
-                            ),
-                        ),
-                        'orderby'    => 'name',
-                        'order'      => 'ASC',
-                    ) );
-                }
-
-                if ( $search_query ) {
-                    $models = array_filter( $models, function( $model ) use ( $search_query ) {
-                        return stripos( $model->name, $search_query ) !== false;
-                    } );
-                }
-
-                if ( ! empty( $models ) && ! is_wp_error( $models ) ) :
-                    ?>
-                    <div class="models-grid">
-                        <?php foreach ( $models as $model ) :
-                            $photo_count = $model->count;
-                            // Récupérer une photo d'exemple
-                            $sample_photo = get_posts( array(
-                                'post_type'      => 'car_photo',
-                                'posts_per_page' => 1,
-                                'tax_query'      => array(
-                                    array(
-                                        'taxonomy' => 'car_model',
-                                        'field'    => 'term_id',
-                                        'terms'    => $model->term_id,
-                                    ),
-                                ),
-                            ) );
-                            $thumbnail = $sample_photo ? get_the_post_thumbnail_url( $sample_photo[0]->ID, 'medium' ) : '';
-                            wp_reset_postdata();
-                            ?>
-                            <a href="<?php echo esc_url( add_query_arg( array( 'brand' => $current_brand->slug, 'model' => $model->slug ), get_permalink() ) ); ?>" class="model-card fade-in">
-                                <div class="model-thumbnail">
-                                    <?php if ( $thumbnail ) : ?>
-                                        <img src="<?php echo esc_url( $thumbnail ); ?>" alt="<?php echo esc_attr( $model->name ); ?>" loading="lazy">
-                                    <?php else : ?>
-                                        <div class="model-placeholder">📷</div>
-                                    <?php endif; ?>
-                                </div>
-                                <div class="model-info">
-                                    <h3 class="model-name"><?php echo esc_html( $model->name ); ?></h3>
-                                    <p class="model-count"><?php echo esc_html( $photo_count ); ?> photo<?php echo $photo_count > 1 ? 's' : ''; ?></p>
-                                </div>
-                            </a>
-                        <?php endforeach; ?>
-                    </div>
-                <?php else : ?>
-                    <div class="no-results">
-                        <h3>Aucun modèle trouvé</h3>
-                        <p>Cette marque n'a pas encore de modèles enregistrés.</p>
-                    </div>
-                <?php endif; ?>
-
-            <?php elseif ( $current_view === 'photos' && $current_brand && $current_model ) : ?>
-                <!-- ========== VUE: PHOTOS D'UN MODÈLE ========== -->
-
-                <!-- En-tête du modèle -->
-                <div class="model-header">
-                    <div class="model-header-brand">
-                        <?php
-                        $logo = get_term_meta( $current_brand->term_id, '_szr_brand_logo_id', true );
+                <div id="brands-grid" class="brands-grid">
+                    <?php
+                    $delay = 0;
+                    foreach ( $brands as $brand ) :
+                        $logo = get_term_meta( $brand->term_id, '_szr_brand_logo_id', true );
                         $logo_url = $logo ? wp_get_attachment_image_url( $logo, 'medium' ) : '';
                         ?>
-                        <?php if ( $logo_url ) : ?>
-                            <img src="<?php echo esc_url( $logo_url ); ?>" alt="Logo <?php echo esc_attr( $current_brand->name ); ?>" class="model-header-logo" loading="lazy">
-                        <?php endif; ?>
-                        <div>
-                            <h2><?php echo esc_html( $current_brand->name . ' ' . $current_model->name ); ?></h2>
-                            <?php if ( $current_model->description ) : ?>
-                                <p class="model-description"><?php echo esc_html( $current_model->description ); ?></p>
-                            <?php endif; ?>
+                        <div class="brand-card" data-animate="fade-up" data-delay="<?php echo $delay; ?>" data-brand-id="<?php echo $brand->term_id; ?>">
+                            <div class="brand-logo">
+                                <?php if ( $logo_url ) : ?>
+                                    <img src="<?php echo esc_url( $logo_url ); ?>" alt="Logo <?php echo esc_attr( $brand->name ); ?>" loading="lazy">
+                                <?php else : ?>
+                                    <div class="brand-logo-placeholder">
+                                        <span><?php echo esc_html( substr( $brand->name, 0, 1 ) ); ?></span>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                            <div class="brand-info">
+                                <h3 class="brand-name"><?php echo esc_html( $brand->name ); ?></h3>
+                                <p class="brand-count"><?php echo $brand->count; ?> photo<?php echo $brand->count > 1 ? 's' : ''; ?></p>
+                            </div>
+                            <div class="brand-arrow">→</div>
                         </div>
-                    </div>
-
-                    <?php if ( is_user_logged_in() ) : ?>
-                        <div class="model-actions">
-                            <a href="<?php echo esc_url( home_url( '/soumettre-photo/?brand=' . $current_brand->term_id . '&model=' . $current_model->term_id ) ); ?>" class="cta-button">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M19 7v2.99s-1.99.01-2 0V7h-3s.01-1.99 0-2h3V2h2v3h3v2h-3zm-3 4V8h-3V5H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8h-3zM5 19l3-4 2 3 3-4 4 5H5z"/>
-                                </svg>
-                                Ajouter une photo
-                            </a>
-                        </div>
-                    <?php else : ?>
-                        <div class="model-actions">
-                            <a href="<?php echo esc_url( wp_login_url( get_permalink() ) ); ?>" class="secondary-button">
-                                Connectez-vous pour ajouter une photo
-                            </a>
-                        </div>
-                    <?php endif; ?>
-                </div>
-
-                <?php
-                // Récupérer les photos de ce modèle
-                $photos_query = new WP_Query( array(
-                    'post_type'      => 'car_photo',
-                    'posts_per_page' => 24,
-                    'paged'          => get_query_var( 'paged' ) ? get_query_var( 'paged' ) : 1,
-                    'tax_query'      => array(
-                        'relation' => 'AND',
-                        array(
-                            'taxonomy' => 'car_brand',
-                            'field'    => 'term_id',
-                            'terms'    => $current_brand->term_id,
-                        ),
-                        array(
-                            'taxonomy' => 'car_model',
-                            'field'    => 'term_id',
-                            'terms'    => $current_model->term_id,
-                        ),
-                    ),
-                    'orderby'        => 'date',
-                    'order'          => 'DESC',
-                ) );
-
-                if ( $photos_query->have_posts() ) :
-                    ?>
-                    <div class="photos-grid">
                         <?php
-                        while ( $photos_query->have_posts() ) :
-                            $photos_query->the_post();
-                            get_template_part( 'template-parts/content', 'photo-card' );
-                        endwhile;
-                        ?>
-                    </div>
+                        $delay += 50;
+                        if ( $delay > 500 ) $delay = 0;
+                    endforeach;
+                    ?>
+                </div>
+            </div>
 
-                    <?php
-                    // Pagination
-                    if ( $photos_query->max_num_pages > 1 ) :
-                        ?>
-                        <div class="pagination">
-                            <?php
-                            echo paginate_links( array(
-                                'total'     => $photos_query->max_num_pages,
-                                'current'   => max( 1, get_query_var( 'paged' ) ),
-                                'prev_text' => '← Précédent',
-                                'next_text' => 'Suivant →',
-                            ) );
-                            ?>
-                        </div>
-                    <?php endif; ?>
+            <!-- Vue modèles (chargée via AJAX) -->
+            <div id="models-view" class="view-container" style="display:none;">
+                <div class="back-button" id="back-to-brands">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                    </svg>
+                    Retour aux marques
+                </div>
+                <div id="models-content"></div>
+            </div>
 
-                    <?php wp_reset_postdata(); ?>
-                <?php else : ?>
-                    <div class="no-results">
-                        <div class="no-results-icon">📸</div>
-                        <h3>Aucune photo pour ce modèle</h3>
-                        <p>Soyez le premier à partager une photo de <?php echo esc_html( $current_brand->name . ' ' . $current_model->name ); ?> !</p>
-                        <?php if ( is_user_logged_in() ) : ?>
-                            <a href="<?php echo esc_url( home_url( '/soumettre-photo/?brand=' . $current_brand->term_id . '&model=' . $current_model->term_id ) ); ?>" class="cta-button">
-                                Ajouter la première photo
-                            </a>
-                        <?php else : ?>
-                            <a href="<?php echo esc_url( wp_login_url( get_permalink() ) ); ?>" class="cta-button">
-                                Se connecter pour ajouter une photo
-                            </a>
-                        <?php endif; ?>
-                    </div>
-                <?php endif; ?>
-
-            <?php endif; ?>
-
+            <!-- Vue photos (chargée via AJAX) -->
+            <div id="photos-view" class="view-container" style="display:none;">
+                <div class="back-button" id="back-to-models">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                    </svg>
+                    Retour aux modèles
+                </div>
+                <div id="photos-content"></div>
+            </div>
         </div>
     </div>
 </div>
+
+<script>
+(function() {
+    // Variables globales
+    let currentBrand = null;
+    let currentModel = null;
+    let searchTimeout = null;
+    let isGridView = true;
+
+    // Animation au scroll
+    function animateOnScroll() {
+        const elements = document.querySelectorAll('[data-animate]:not(.animated)');
+        elements.forEach(el => {
+            const rect = el.getBoundingClientRect();
+            if (rect.top < window.innerHeight - 100) {
+                const delay = el.dataset.delay || 0;
+                setTimeout(() => {
+                    el.classList.add('animated');
+                }, delay);
+            }
+        });
+    }
+
+    // Compteurs animés
+    function animateCounters() {
+        document.querySelectorAll('.stat-number[data-count]').forEach(counter => {
+            const target = parseInt(counter.dataset.count);
+            const duration = 2000;
+            const step = target / (duration / 16);
+            let current = 0;
+
+            const timer = setInterval(() => {
+                current += step;
+                if (current >= target) {
+                    counter.textContent = target.toLocaleString();
+                    clearInterval(timer);
+                } else {
+                    counter.textContent = Math.floor(current).toLocaleString();
+                }
+            }, 16);
+        });
+    }
+
+    // Recherche en temps réel
+    document.getElementById('live-search').addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        const query = e.target.value.trim();
+
+        if (query.length < 2) {
+            document.getElementById('search-results').innerHTML = '';
+            return;
+        }
+
+        searchTimeout = setTimeout(() => {
+            fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: `action=szr_search_brands&query=${encodeURIComponent(query)}`
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    displaySearchResults(data.data);
+                }
+            });
+        }, 300);
+    });
+
+    function displaySearchResults(results) {
+        const container = document.getElementById('search-results');
+        if (!results || results.length === 0) {
+            container.innerHTML = '<div class="no-results">Aucun résultat</div>';
+            return;
+        }
+
+        container.innerHTML = results.map(item => `
+            <div class="search-result-item" onclick="loadBrand(${item.id})">
+                ${item.logo ? `<img src="${item.logo}" alt="${item.name}">` : `<div class="result-placeholder">${item.name[0]}</div>`}
+                <div class="result-info">
+                    <strong>${item.name}</strong>
+                    <span>${item.count} photo${item.count > 1 ? 's' : ''}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Charger une marque
+    window.loadBrand = function(brandId) {
+        showLoading();
+
+        fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: `action=szr_get_brand_models&brand_id=${brandId}`
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                currentBrand = data.data.brand;
+                displayModels(data.data);
+                updateBreadcrumb('models');
+                hideLoading();
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            hideLoading();
+        });
+
+        // Fermer les résultats de recherche
+        document.getElementById('search-results').innerHTML = '';
+        document.getElementById('live-search').value = '';
+    };
+
+    // Afficher les modèles
+    function displayModels(data) {
+        const brand = data.brand;
+        const models = data.models;
+
+        document.getElementById('brands-view').style.display = 'none';
+        document.getElementById('models-view').style.display = 'block';
+        document.getElementById('photos-view').style.display = 'none';
+
+        let html = `
+            <div class="brand-header" data-animate="fade-up">
+                ${brand.logo ? `<img src="${brand.logo}" alt="${brand.name}" class="brand-header-logo">` : ''}
+                <h2>${brand.name}</h2>
+                <p class="brand-description">${brand.description || ''}</p>
+            </div>
+            <div class="models-grid">
+        `;
+
+        models.forEach((model, index) => {
+            html += `
+                <div class="model-card" data-animate="fade-up" data-delay="${index * 50}" onclick="loadModel(${model.id}, '${model.name}')">
+                    <div class="model-thumbnail">
+                        ${model.thumbnail ? `<img src="${model.thumbnail}" alt="${model.name}" loading="lazy">` : '<div class="model-placeholder">📷</div>'}
+                    </div>
+                    <div class="model-info">
+                        <h3 class="model-name">${model.name}</h3>
+                        <p class="model-count">${model.count} photo${model.count > 1 ? 's' : ''}</p>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        document.getElementById('models-content').innerHTML = html;
+
+        setTimeout(() => animateOnScroll(), 100);
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+
+    // Charger un modèle
+    window.loadModel = function(modelId, modelName) {
+        showLoading();
+        currentModel = {id: modelId, name: modelName};
+
+        fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: `action=szr_get_model_photos&model_id=${modelId}&brand_id=${currentBrand.id}`
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                displayPhotos(data.data);
+                updateBreadcrumb('photos');
+                hideLoading();
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            hideLoading();
+        });
+    };
+
+    // Afficher les photos
+    function displayPhotos(photos) {
+        document.getElementById('models-view').style.display = 'none';
+        document.getElementById('photos-view').style.display = 'block';
+
+        let html = `
+            <div class="model-header" data-animate="fade-up">
+                ${currentBrand.logo ? `<img src="${currentBrand.logo}" alt="${currentBrand.name}" class="model-header-logo">` : ''}
+                <div>
+                    <h2>${currentBrand.name} ${currentModel.name}</h2>
+                    <p class="model-description">${photos.length} photo${photos.length > 1 ? 's' : ''} disponible${photos.length > 1 ? 's' : ''}</p>
+                </div>
+            </div>
+            <div class="photos-grid">
+        `;
+
+        photos.forEach((photo, index) => {
+            html += `
+                <div class="photo-card" data-animate="fade-up" data-delay="${index * 30}">
+                    <div class="photo-card-image">
+                        <img src="${photo.thumbnail}" alt="${photo.title}" loading="lazy">
+                    </div>
+                    <div class="photo-card-content">
+                        <h3 class="photo-card-title"><a href="${photo.url}">${photo.title}</a></h3>
+                        <div class="photo-card-meta">
+                            <span>Par ${photo.author}</span>
+                            <span>${photo.date}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        document.getElementById('photos-content').innerHTML = html;
+
+        setTimeout(() => animateOnScroll(), 100);
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+
+    // Navigation
+    document.getElementById('back-to-brands').addEventListener('click', () => {
+        document.getElementById('brands-view').style.display = 'block';
+        document.getElementById('models-view').style.display = 'none';
+        currentBrand = null;
+        updateBreadcrumb('brands');
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+
+    document.getElementById('back-to-models').addEventListener('click', () => {
+        document.getElementById('models-view').style.display = 'block';
+        document.getElementById('photos-view').style.display = 'none';
+        currentModel = null;
+        updateBreadcrumb('models');
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+
+    // Breadcrumb
+    function updateBreadcrumb(view) {
+        const nav = document.getElementById('breadcrumb-nav');
+        let html = '<a href="<?php echo home_url(); ?>">Accueil</a><span class="separator">/</span>';
+
+        if (view === 'brands') {
+            html += '<span class="current">Marques</span>';
+        } else if (view === 'models' && currentBrand) {
+            html += '<a href="#" onclick="document.getElementById(\'back-to-brands\').click(); return false;">Marques</a>';
+            html += '<span class="separator">/</span>';
+            html += `<span class="current">${currentBrand.name}</span>`;
+        } else if (view === 'photos' && currentBrand && currentModel) {
+            html += '<a href="#" onclick="document.getElementById(\'back-to-brands\').click(); return false;">Marques</a>';
+            html += '<span class="separator">/</span>';
+            html += `<a href="#" onclick="document.getElementById('back-to-models').click(); return false;">${currentBrand.name}</a>`;
+            html += '<span class="separator">/</span>';
+            html += `<span class="current">${currentModel.name}</span>`;
+        }
+
+        nav.innerHTML = html;
+    }
+
+    // Toggle vue grille/liste
+    document.getElementById('grid-view').addEventListener('click', () => {
+        isGridView = true;
+        document.getElementById('grid-view').classList.add('active');
+        document.getElementById('list-view').classList.remove('active');
+        document.getElementById('brands-grid').classList.remove('list-layout');
+    });
+
+    document.getElementById('list-view').addEventListener('click', () => {
+        isGridView = false;
+        document.getElementById('list-view').classList.add('active');
+        document.getElementById('grid-view').classList.remove('active');
+        document.getElementById('brands-grid').classList.add('list-layout');
+    });
+
+    // Loading
+    function showLoading() {
+        document.getElementById('loading-overlay').style.display = 'flex';
+    }
+
+    function hideLoading() {
+        document.getElementById('loading-overlay').style.display = 'none';
+    }
+
+    // Event listeners cards
+    document.querySelectorAll('.brand-card').forEach(card => {
+        card.addEventListener('click', function() {
+            const brandId = this.dataset.brandId;
+            loadBrand(brandId);
+        });
+    });
+
+    // Init
+    window.addEventListener('scroll', animateOnScroll);
+    animateOnScroll();
+    setTimeout(() => animateCounters(), 500);
+
+    // Fermer les résultats quand on clique ailleurs
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.hero-search')) {
+            document.getElementById('search-results').innerHTML = '';
+        }
+    });
+})();
+</script>
 
 <?php
 get_footer();

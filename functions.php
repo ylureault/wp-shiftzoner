@@ -414,16 +414,234 @@ function szr_report_ajax() {
     $post_id = intval( $_POST['post_id'] ?? 0 );
     $reason = sanitize_text_field( $_POST['reason'] ?? '' );
     if ( ! $post_id || ! $reason ) wp_send_json_error( 'Données invalides' );
-    
+
     $reports = get_post_meta( $post_id, '_szr_reports', true ) ?: array();
     $reports[] = array( 'user_id' => get_current_user_id(), 'reason' => $reason, 'date' => current_time( 'mysql' ) );
     update_post_meta( $post_id, '_szr_reports', $reports );
-    
+
     if ( count( $reports ) >= 5 ) {
         wp_update_post( array( 'ID' => $post_id, 'post_status' => 'pending' ) );
         wp_mail( get_option( 'admin_email' ), 'Contenu signalé', 'Contenu masqué : ' . get_permalink( $post_id ) );
     }
     wp_send_json_success( array( 'message' => 'Merci' ) );
+}
+
+// AJAX: Live search for brands page
+add_action( 'wp_ajax_szr_search_brands', 'szr_search_brands_ajax' );
+add_action( 'wp_ajax_nopriv_szr_search_brands', 'szr_search_brands_ajax' );
+function szr_search_brands_ajax() {
+    $query = sanitize_text_field( $_POST['query'] ?? '' );
+
+    if ( strlen( $query ) < 2 ) {
+        wp_send_json_success( array( 'results' => array() ) );
+        return;
+    }
+
+    $results = array();
+
+    // Search brands
+    $brands = get_terms( array(
+        'taxonomy'   => 'car_brand',
+        'hide_empty' => true,
+        'search'     => $query,
+        'number'     => 5,
+    ) );
+
+    if ( ! is_wp_error( $brands ) ) {
+        foreach ( $brands as $brand ) {
+            $logo = get_term_meta( $brand->term_id, 'brand_logo', true );
+            $results[] = array(
+                'type'  => 'brand',
+                'id'    => $brand->term_id,
+                'name'  => $brand->name,
+                'count' => $brand->count,
+                'logo'  => $logo ?: '',
+            );
+        }
+    }
+
+    // Search models
+    $models = get_terms( array(
+        'taxonomy'   => 'car_model',
+        'hide_empty' => true,
+        'search'     => $query,
+        'number'     => 5,
+    ) );
+
+    if ( ! is_wp_error( $models ) ) {
+        foreach ( $models as $model ) {
+            $brand_id = get_term_meta( $model->term_id, 'brand_id', true );
+            $brand = $brand_id ? get_term( $brand_id, 'car_brand' ) : null;
+            $results[] = array(
+                'type'       => 'model',
+                'id'         => $model->term_id,
+                'name'       => $model->name,
+                'brand_name' => $brand && ! is_wp_error( $brand ) ? $brand->name : '',
+                'count'      => $model->count,
+            );
+        }
+    }
+
+    wp_send_json_success( array( 'results' => $results ) );
+}
+
+// AJAX: Get brand models for brands page
+add_action( 'wp_ajax_szr_get_brand_models', 'szr_get_brand_models_ajax' );
+add_action( 'wp_ajax_nopriv_szr_get_brand_models', 'szr_get_brand_models_ajax' );
+function szr_get_brand_models_ajax() {
+    $brand_id = intval( $_POST['brand_id'] ?? 0 );
+
+    if ( ! $brand_id ) {
+        wp_send_json_error( 'Invalid brand ID' );
+        return;
+    }
+
+    $brand = get_term( $brand_id, 'car_brand' );
+
+    if ( is_wp_error( $brand ) || ! $brand ) {
+        wp_send_json_error( 'Brand not found' );
+        return;
+    }
+
+    // Get brand info
+    $brand_logo = get_term_meta( $brand_id, 'brand_logo', true );
+    $brand_description = term_description( $brand_id, 'car_brand' );
+
+    // Get models for this brand
+    $models = get_terms( array(
+        'taxonomy'   => 'car_model',
+        'hide_empty' => true,
+        'meta_query' => array(
+            array(
+                'key'   => 'brand_id',
+                'value' => $brand_id,
+            ),
+        ),
+        'orderby'    => 'name',
+        'order'      => 'ASC',
+    ) );
+
+    $models_data = array();
+
+    if ( ! is_wp_error( $models ) ) {
+        foreach ( $models as $model ) {
+            // Get first photo for thumbnail
+            $photo_query = new WP_Query( array(
+                'post_type'      => 'car_photo',
+                'posts_per_page' => 1,
+                'tax_query'      => array(
+                    array(
+                        'taxonomy' => 'car_model',
+                        'field'    => 'term_id',
+                        'terms'    => $model->term_id,
+                    ),
+                ),
+            ) );
+
+            $thumbnail = '';
+            if ( $photo_query->have_posts() ) {
+                $photo_query->the_post();
+                $thumbnail = get_the_post_thumbnail_url( get_the_ID(), 'medium' );
+                wp_reset_postdata();
+            }
+
+            $models_data[] = array(
+                'id'        => $model->term_id,
+                'name'      => $model->name,
+                'count'     => $model->count,
+                'thumbnail' => $thumbnail,
+            );
+        }
+    }
+
+    wp_send_json_success( array(
+        'brand'  => array(
+            'id'          => $brand_id,
+            'name'        => $brand->name,
+            'logo'        => $brand_logo,
+            'description' => $brand_description,
+            'count'       => $brand->count,
+        ),
+        'models' => $models_data,
+    ) );
+}
+
+// AJAX: Get model photos for brands page
+add_action( 'wp_ajax_szr_get_model_photos', 'szr_get_model_photos_ajax' );
+add_action( 'wp_ajax_nopriv_szr_get_model_photos', 'szr_get_model_photos_ajax' );
+function szr_get_model_photos_ajax() {
+    $model_id = intval( $_POST['model_id'] ?? 0 );
+    $page = intval( $_POST['page'] ?? 1 );
+    $per_page = 12;
+
+    if ( ! $model_id ) {
+        wp_send_json_error( 'Invalid model ID' );
+        return;
+    }
+
+    $model = get_term( $model_id, 'car_model' );
+
+    if ( is_wp_error( $model ) || ! $model ) {
+        wp_send_json_error( 'Model not found' );
+        return;
+    }
+
+    // Get brand info
+    $brand_id = get_term_meta( $model_id, 'brand_id', true );
+    $brand = $brand_id ? get_term( $brand_id, 'car_brand' ) : null;
+
+    // Get photos
+    $query = new WP_Query( array(
+        'post_type'      => 'car_photo',
+        'posts_per_page' => $per_page,
+        'paged'          => $page,
+        'tax_query'      => array(
+            array(
+                'taxonomy' => 'car_model',
+                'field'    => 'term_id',
+                'terms'    => $model_id,
+            ),
+        ),
+        'orderby'        => 'date',
+        'order'          => 'DESC',
+    ) );
+
+    $photos = array();
+
+    if ( $query->have_posts() ) {
+        while ( $query->have_posts() ) {
+            $query->the_post();
+
+            $votes = intval( get_post_meta( get_the_ID(), '_szr_votes', true ) );
+            $views = intval( get_post_meta( get_the_ID(), '_szr_views', true ) );
+
+            $photos[] = array(
+                'id'        => get_the_ID(),
+                'title'     => get_the_title(),
+                'url'       => get_permalink(),
+                'thumbnail' => get_the_post_thumbnail_url( get_the_ID(), 'medium' ),
+                'author'    => get_the_author(),
+                'date'      => get_the_date(),
+                'votes'     => $votes,
+                'views'     => $views,
+                'comments'  => get_comments_number(),
+            );
+        }
+        wp_reset_postdata();
+    }
+
+    wp_send_json_success( array(
+        'model'    => array(
+            'id'         => $model_id,
+            'name'       => $model->name,
+            'brand_name' => $brand && ! is_wp_error( $brand ) ? $brand->name : '',
+            'brand_id'   => $brand_id,
+            'count'      => $model->count,
+        ),
+        'photos'   => $photos,
+        'has_more' => $page < $query->max_num_pages,
+        'page'     => $page,
+    ) );
 }
 
 // 10. COMPTEUR VUES
