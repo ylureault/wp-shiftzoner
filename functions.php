@@ -558,6 +558,7 @@ function szr_get_brand_models_ajax() {
         'brand'  => array(
             'id'          => $brand_id,
             'name'        => $brand->name,
+            'slug'        => $brand->slug,
             'logo'        => $brand_logo,
             'description' => $brand_description,
             'count'       => $brand->count,
@@ -634,6 +635,7 @@ function szr_get_model_photos_ajax() {
         'model'    => array(
             'id'         => $model_id,
             'name'       => $model->name,
+            'slug'       => $model->slug,
             'brand_name' => $brand && ! is_wp_error( $brand ) ? $brand->name : '',
             'brand_id'   => $brand_id,
             'count'      => $model->count,

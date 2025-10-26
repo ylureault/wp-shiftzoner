@@ -433,14 +433,33 @@ foreach ($brands as $b){
 
     // Handle file preview
     function handleFile(file) {
+        // Validate file type
         if (!file.type.startsWith('image/')) {
-            alert('Veuillez sélectionner une image');
+            alert('Veuillez sélectionner une image (JPG, PNG, GIF, WEBP ou TIFF)');
+            photoInput.value = '';
             return;
         }
 
+        // Validate file size (<?php echo $MAX_BYTES; ?> bytes max)
+        const maxBytes = <?php echo $MAX_BYTES; ?>;
+        if (file.size > maxBytes) {
+            const maxMB = (maxBytes / 1024 / 1024).toFixed(1);
+            const fileMB = (file.size / 1024 / 1024).toFixed(1);
+            alert(`Fichier trop volumineux (${fileMB} MB). Taille maximale: ${maxMB} MB`);
+            photoInput.value = '';
+            return;
+        }
+
+        // Show file info
+        const fileSize = file.size < 1024 * 1024
+            ? `${(file.size / 1024).toFixed(1)} KB`
+            : `${(file.size / 1024 / 1024).toFixed(1)} MB`;
+
+        // Update preview
         const reader = new FileReader();
         reader.onload = (e) => {
             previewImage.src = e.target.result;
+            previewImage.title = `${file.name} (${fileSize})`;
             dropContent.style.display = 'none';
             dropPreview.style.display = 'block';
         };
@@ -495,10 +514,47 @@ foreach ($brands as $b){
         });
     });
 
-    // Form submit
-    document.getElementById('upload-form').addEventListener('submit', () => {
+    // Auto-generate title from brand + model if empty
+    modelSelect.addEventListener('change', () => {
+        const titleInput = document.getElementById('title');
+        if (!titleInput.value.trim()) {
+            const brandName = brandSelect.options[brandSelect.selectedIndex]?.text || '';
+            const modelName = modelSelect.options[modelSelect.selectedIndex]?.text || '';
+            if (brandName && modelName && brandName !== 'Choisir une marque' && modelName !== 'Choisir un modèle') {
+                titleInput.value = `${brandName} ${modelName}`;
+            }
+        }
+    });
+
+    // Form validation and submit
+    document.getElementById('upload-form').addEventListener('submit', (e) => {
+        // Validate photo
+        if (!photoInput.files || !photoInput.files[0]) {
+            e.preventDefault();
+            alert('Veuillez sélectionner une photo');
+            return false;
+        }
+
+        // Validate brand
+        if (!brandSelect.value) {
+            e.preventDefault();
+            alert('Veuillez choisir une marque');
+            brandSelect.focus();
+            return false;
+        }
+
+        // Validate model
+        if (!modelSelect.value) {
+            e.preventDefault();
+            alert('Veuillez choisir un modèle');
+            modelSelect.focus();
+            return false;
+        }
+
+        // Show loading state
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<svg class="spinner-svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="4" opacity="0.25"/><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg> Publication en cours...';
+        return true;
     });
 })();
 </script>

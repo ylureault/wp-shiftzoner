@@ -250,7 +250,7 @@ $total_photos = wp_count_posts( 'car_photo' )->publish;
     }
 
     // Charger une marque
-    window.loadBrand = function(brandId) {
+    window.loadBrand = function(brandId, updateHistory = true) {
         showLoading();
 
         fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
@@ -265,10 +265,22 @@ $total_photos = wp_count_posts( 'car_photo' )->publish;
                 displayModels(data.data);
                 updateBreadcrumb('models');
                 hideLoading();
+
+                // Mettre à jour l'URL
+                if (updateHistory && currentBrand.slug) {
+                    const url = new URL(window.location);
+                    url.searchParams.set('brand', currentBrand.slug);
+                    url.searchParams.delete('model');
+                    window.history.pushState({view: 'models', brandId: brandId}, '', url);
+                }
+            } else {
+                alert('Marque introuvable');
+                hideLoading();
             }
         })
         .catch(err => {
             console.error(err);
+            alert('Erreur lors du chargement de la marque');
             hideLoading();
         });
 
@@ -317,7 +329,7 @@ $total_photos = wp_count_posts( 'car_photo' )->publish;
     }
 
     // Charger un modèle
-    window.loadModel = function(modelId, modelName) {
+    window.loadModel = function(modelId, modelName, updateHistory = true) {
         showLoading();
         currentModel = {id: modelId, name: modelName};
 
@@ -332,10 +344,22 @@ $total_photos = wp_count_posts( 'car_photo' )->publish;
                 displayPhotos(data.data);
                 updateBreadcrumb('photos');
                 hideLoading();
+
+                // Mettre à jour l'URL
+                if (updateHistory && currentBrand.slug && data.data.model.slug) {
+                    const url = new URL(window.location);
+                    url.searchParams.set('brand', currentBrand.slug);
+                    url.searchParams.set('model', data.data.model.slug);
+                    window.history.pushState({view: 'photos', brandId: currentBrand.id, modelId: modelId}, '', url);
+                }
+            } else {
+                alert('Modèle introuvable');
+                hideLoading();
             }
         })
         .catch(err => {
             console.error(err);
+            alert('Erreur lors du chargement du modèle');
             hideLoading();
         });
     };
@@ -385,8 +409,15 @@ $total_photos = wp_count_posts( 'car_photo' )->publish;
         document.getElementById('brands-view').style.display = 'block';
         document.getElementById('models-view').style.display = 'none';
         currentBrand = null;
+        currentModel = null;
         updateBreadcrumb('brands');
         window.scrollTo({top: 0, behavior: 'smooth'});
+
+        // Mettre à jour l'URL
+        const url = new URL(window.location);
+        url.searchParams.delete('brand');
+        url.searchParams.delete('model');
+        window.history.pushState({view: 'brands'}, '', url);
     });
 
     document.getElementById('back-to-models').addEventListener('click', () => {
@@ -395,6 +426,14 @@ $total_photos = wp_count_posts( 'car_photo' )->publish;
         currentModel = null;
         updateBreadcrumb('models');
         window.scrollTo({top: 0, behavior: 'smooth'});
+
+        // Mettre à jour l'URL
+        if (currentBrand && currentBrand.slug) {
+            const url = new URL(window.location);
+            url.searchParams.set('brand', currentBrand.slug);
+            url.searchParams.delete('model');
+            window.history.pushState({view: 'models', brandId: currentBrand.id}, '', url);
+        }
     });
 
     // Breadcrumb
@@ -451,10 +490,79 @@ $total_photos = wp_count_posts( 'car_photo' )->publish;
         });
     });
 
+    // Gestion de l'historique (boutons précédent/suivant du navigateur)
+    window.addEventListener('popstate', (e) => {
+        if (e.state) {
+            if (e.state.view === 'brands') {
+                document.getElementById('brands-view').style.display = 'block';
+                document.getElementById('models-view').style.display = 'none';
+                document.getElementById('photos-view').style.display = 'none';
+                currentBrand = null;
+                currentModel = null;
+                updateBreadcrumb('brands');
+            } else if (e.state.view === 'models' && e.state.brandId) {
+                loadBrand(e.state.brandId, false);
+            } else if (e.state.view === 'photos' && e.state.brandId && e.state.modelId) {
+                loadBrand(e.state.brandId, false);
+                setTimeout(() => {
+                    if (currentBrand) {
+                        loadModel(e.state.modelId, '', false);
+                    }
+                }, 500);
+            }
+        }
+    });
+
+    // Charger depuis l'URL au démarrage
+    function loadFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        const brandSlug = params.get('brand');
+        const modelSlug = params.get('model');
+
+        if (brandSlug) {
+            // Trouver l'ID de la marque depuis le slug
+            const brandCards = document.querySelectorAll('.brand-card');
+            let brandId = null;
+
+            brandCards.forEach(card => {
+                const brandName = card.querySelector('.brand-name').textContent.trim();
+                if (brandName.toLowerCase().replace(/\s+/g, '-') === brandSlug.toLowerCase()) {
+                    brandId = card.dataset.brandId;
+                }
+            });
+
+            if (brandId) {
+                setTimeout(() => {
+                    loadBrand(brandId, false);
+
+                    // Si on a aussi un modèle, le charger après la marque
+                    if (modelSlug) {
+                        setTimeout(() => {
+                            // Chercher le modèle dans les données chargées
+                            const modelCards = document.querySelectorAll('.model-card');
+                            modelCards.forEach(card => {
+                                const modelNameEl = card.querySelector('.model-name');
+                                if (modelNameEl) {
+                                    const modelName = modelNameEl.textContent.trim();
+                                    if (modelName.toLowerCase().replace(/\s+/g, '-') === modelSlug.toLowerCase()) {
+                                        card.click();
+                                    }
+                                }
+                            });
+                        }, 1000);
+                    }
+                }, 500);
+            }
+        }
+    }
+
     // Init
     window.addEventListener('scroll', animateOnScroll);
     animateOnScroll();
     setTimeout(() => animateCounters(), 500);
+
+    // Charger depuis l'URL après un court délai
+    setTimeout(() => loadFromURL(), 300);
 
     // Fermer les résultats quand on clique ailleurs
     document.addEventListener('click', (e) => {
