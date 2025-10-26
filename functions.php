@@ -456,7 +456,13 @@ function shiftzoner_increase_upload_size( $size ) {
 add_filter( 'upload_size_limit', 'shiftzoner_increase_upload_size' );
 
 // 13. WATERMARKING
+// Désactivé si Easy Watermark est actif pour éviter les conflits
 function shiftzoner_apply_watermark( $metadata, $attachment_id ) {
+    // Désactiver si Easy Watermark est actif
+    if ( class_exists( 'Easy_Watermark' ) || function_exists( 'easy_watermark_init' ) ) {
+        return $metadata;
+    }
+
     $post_parent = wp_get_post_parent_id( $attachment_id );
     if ( ! $post_parent || get_post_type( $post_parent ) !== 'car_photo' ) return $metadata;
 
@@ -508,6 +514,14 @@ function shiftzoner_apply_watermark( $metadata, $attachment_id ) {
     return $metadata;
 }
 add_filter( 'wp_generate_attachment_metadata', 'shiftzoner_apply_watermark', 10, 2 );
+
+// Note admin si Easy Watermark est actif
+function shiftzoner_watermark_notice() {
+    if ( class_exists( 'Easy_Watermark' ) || function_exists( 'easy_watermark_init' ) ) {
+        echo '<div class="notice notice-info"><p><strong>ShiftZoneR :</strong> Easy Watermark est actif. Le watermark intégré du thème est automatiquement désactivé pour éviter les conflits. Configurez Easy Watermark dans Réglages > Easy Watermark.</p></div>';
+    }
+}
+add_action( 'admin_notices', 'shiftzoner_watermark_notice' );
 
 // 14. RATE LIMITING & UPLOAD VALIDATION
 function shiftzoner_check_upload_limit() {
@@ -1049,3 +1063,53 @@ function shiftzoner_pwa_meta() {
     echo '<meta name="apple-mobile-web-app-title" content="ShiftZoneR">';
 }
 add_action( 'wp_head', 'shiftzoner_pwa_meta', 0 );
+
+// 17. MENU FALLBACK
+function shiftzoner_fallback_menu() {
+    echo '<ul class="nav-links">';
+    echo '<li><a href="' . esc_url( home_url( '/' ) ) . '">Accueil</a></li>';
+    echo '<li><a href="' . esc_url( home_url( '/galerie/' ) ) . '">Explorer</a></li>';
+    if ( function_exists( 'bp_is_active' ) ) {
+        echo '<li><a href="' . esc_url( bp_get_groups_directory_permalink() ) . '">Communauté</a></li>';
+    }
+    echo '<li><a href="' . esc_url( home_url( '/carte/' ) ) . '">Carte</a></li>';
+    if ( function_exists( 'bbp_is_active' ) ) {
+        echo '<li><a href="' . esc_url( home_url( '/discussion/' ) ) . '">Discussion</a></li>';
+    }
+    if ( is_user_logged_in() && function_exists( 'bp_core_get_user_domain' ) ) {
+        echo '<li><a href="' . esc_url( bp_core_get_user_domain( get_current_user_id() ) ) . '">Mon Profil</a></li>';
+    }
+    echo '</ul>';
+}
+
+// Menu mobile avec icônes
+function shiftzoner_mobile_menu_icons( $item_id, $url, $text ) {
+    $icons = array(
+        'accueil' => '<svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>',
+        'explorer' => '<svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/></svg>',
+        'galerie' => '<svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/></svg>',
+        'communauté' => '<svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/></svg>',
+        'groupes' => '<svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/></svg>',
+        'carte' => '<svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/></svg>',
+        'discussion' => '<svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd"/></svg>',
+        'forums' => '<svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd"/></svg>',
+        'profil' => '<svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>',
+        'mon profil' => '<svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>',
+    );
+
+    $text_lower = strtolower( $text );
+    $icon = '';
+
+    foreach ( $icons as $keyword => $svg ) {
+        if ( stripos( $text_lower, $keyword ) !== false ) {
+            $icon = $svg;
+            break;
+        }
+    }
+
+    if ( ! $icon ) {
+        $icon = '<svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>';
+    }
+
+    return $icon;
+}

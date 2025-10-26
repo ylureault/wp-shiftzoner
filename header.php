@@ -29,17 +29,14 @@
                 ?>
             </div>
 
-            <ul class="nav-links">
-                <li><a href="<?php echo esc_url( home_url( '/' ) ); ?>">Accueil</a></li>
-                <li><a href="<?php echo esc_url( home_url( '/galerie/' ) ); ?>">Explorer</a></li>
-                <?php if ( function_exists( 'bbp_is_active' ) ) : ?>
-                <li><a href="<?php echo esc_url( get_post_type_archive_link( 'forum' ) ); ?>">Communauté</a></li>
-                <?php endif; ?>
-                <li><a href="<?php echo esc_url( home_url( '/carte/' ) ); ?>">Carte</a></li>
-                <?php if ( is_user_logged_in() ) : ?>
-                <li><a href="<?php echo esc_url( bp_core_get_user_domain( get_current_user_id() ) ); ?>">Profil</a></li>
-                <?php endif; ?>
-            </ul>
+            <?php
+            wp_nav_menu( array(
+                'theme_location' => 'primary',
+                'menu_class'     => 'nav-links',
+                'container'      => false,
+                'fallback_cb'    => 'shiftzoner_fallback_menu',
+            ) );
+            ?>
 
             <div class="nav-actions">
                 <?php if ( is_user_logged_in() ) : ?>
@@ -90,30 +87,46 @@
             </div>
 
             <nav class="mobile-nav-links">
-                <a href="<?php echo esc_url( home_url( '/' ) ); ?>" class="mobile-nav-link">
-                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
-                    Accueil
-                </a>
-                <a href="<?php echo esc_url( home_url( '/galerie/' ) ); ?>" class="mobile-nav-link">
-                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/></svg>
-                    Explorer
-                </a>
-                <?php if ( function_exists( 'bp_is_active' ) ) : ?>
-                <a href="<?php echo esc_url( bp_get_groups_directory_permalink() ); ?>" class="mobile-nav-link">
-                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/></svg>
-                    Communauté
-                </a>
-                <?php endif; ?>
-                <a href="<?php echo esc_url( home_url( '/carte/' ) ); ?>" class="mobile-nav-link">
-                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/></svg>
-                    Carte
-                </a>
-                <?php if ( is_user_logged_in() ) : ?>
-                <a href="<?php echo esc_url( bp_core_get_user_domain( get_current_user_id() ) ); ?>" class="mobile-nav-link">
-                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
-                    Mon Profil
-                </a>
-                <?php endif; ?>
+                <?php
+                if ( has_nav_menu( 'primary' ) ) {
+                    $menu_items = wp_get_nav_menu_items( get_nav_menu_locations()['primary'] );
+                    if ( $menu_items ) {
+                        foreach ( $menu_items as $item ) {
+                            $icon = shiftzoner_mobile_menu_icons( $item->ID, $item->url, $item->title );
+                            echo '<a href="' . esc_url( $item->url ) . '" class="mobile-nav-link">';
+                            echo $icon;
+                            echo esc_html( $item->title );
+                            echo '</a>';
+                        }
+                    }
+                } else {
+                    // Fallback si pas de menu
+                    ?>
+                    <a href="<?php echo esc_url( home_url( '/' ) ); ?>" class="mobile-nav-link">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
+                        Accueil
+                    </a>
+                    <a href="<?php echo esc_url( home_url( '/galerie/' ) ); ?>" class="mobile-nav-link">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/></svg>
+                        Explorer
+                    </a>
+                    <?php if ( function_exists( 'bp_is_active' ) ) : ?>
+                    <a href="<?php echo esc_url( bp_get_groups_directory_permalink() ); ?>" class="mobile-nav-link">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/></svg>
+                        Communauté
+                    </a>
+                    <?php endif; ?>
+                    <a href="<?php echo esc_url( home_url( '/carte/' ) ); ?>" class="mobile-nav-link">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/></svg>
+                        Carte
+                    </a>
+                    <?php if ( is_user_logged_in() && function_exists( 'bp_core_get_user_domain' ) ) : ?>
+                    <a href="<?php echo esc_url( bp_core_get_user_domain( get_current_user_id() ) ); ?>" class="mobile-nav-link">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
+                        Mon Profil
+                    </a>
+                    <?php endif; ?>
+                <?php } ?>
             </nav>
 
             <div class="mobile-nav-actions">
