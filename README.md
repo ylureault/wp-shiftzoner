@@ -67,7 +67,7 @@ wp-shiftzoner/
 - WordPress 5.0+
 - PHP 7.4+
 - Plugins recommandés :
-  - **BuddyPress** : Profils et réseau social
+  - **BuddyPress** : Profils et réseau social ✅
   - **bbPress** : Forum de discussion
   - **Advanced Custom Fields (ACF)** : Champs personnalisés
   - **Easy Watermark** : Filigrane automatique
@@ -84,6 +84,24 @@ wp-shiftzoner/
    - Carte (avec template "Carte Interactive")
    - Marques (avec template "Page Marques")
    - Soumettre une photo (avec template "Soumettre une photo")
+
+### Configuration du logo
+
+1. Allez dans **Apparence > Personnaliser > Identité du site**
+2. Uploadez votre logo (recommandé : 400x100px, PNG transparent)
+3. Le logo remplacera automatiquement le texte "SHIFTZONER"
+
+### Personnalisation des textes
+
+1. Allez dans **Apparence > Personnaliser**
+2. Ouvrez la section **Page d'accueil ShiftZoneR**
+3. Modifiez les textes :
+   - Titre et sous-titre Hero
+   - Titre et sous-titre Section Rafael
+   - Titre et sous-titre Section Communauté
+   - Titre et sous-titre CTA
+4. Ouvrez la section **Réseaux Sociaux**
+5. Ajoutez vos liens Instagram, Facebook, Twitter
 
 ## Configuration
 
@@ -218,6 +236,40 @@ do_action( 'szr_before_moderation', $post_id, $report_count );
 - **Captcha** après 5 uploads
 - **Modération** a posteriori avec signalement
 
+## SEO
+
+Le thème intègre un SEO optimisé automatiquement :
+
+### Meta Tags
+- Description et keywords automatiques basés sur le contenu
+- Balises author et dates (published/modified)
+- Titre optimisé : `[Marque] [Modèle] [Année] - ShiftZoneR`
+
+### Open Graph
+- Partage optimisé sur Facebook, LinkedIn
+- og:title, og:description, og:image, og:url
+- og:type = "article" pour les photos
+- Dimensions image : 1200x630
+
+### Twitter Card
+- Type : `summary_large_image`
+- Image, titre et description automatiques
+
+### Schema.org (Structured Data)
+- **ImageObject** pour chaque photo avec :
+  - Métadonnées complètes (titre, description, dates)
+  - Auteur et publisher
+  - Géolocalisation GPS (si disponible)
+- **WebSite** pour la homepage avec :
+  - SearchAction pour la recherche
+
+### Optimisation
+- Sitemap XML automatique (via WordPress)
+- URLs propres : `/photo/marque-modele-annee/`
+- Images avec attributs alt automatiques
+- Balises H1, H2, H3 structurées
+- Meta viewport pour mobile
+
 ## Performance
 
 - **Lazy loading** natif pour les images
@@ -225,6 +277,7 @@ do_action( 'szr_before_moderation', $post_id, $report_count );
 - **Caching** des requêtes lourdes
 - **Optimisation** des images (WebP)
 - **Minification** recommandée pour production
+- **Compteur de vues** optimisé
 
 ## Support Navigateurs
 
@@ -234,6 +287,16 @@ do_action( 'szr_before_moderation', $post_id, $report_count );
 - Mobile (iOS Safari, Chrome Android)
 
 ## Changelog
+
+### Version 1.1.0 (2025-01-26)
+- ✨ **Logo personnalisé** : Support du logo WordPress dans le header
+- ⚙️ **Customizer** : Personnalisation des textes via Apparence > Personnaliser
+- 🚀 **SEO optimisé** : Meta tags, Open Graph, Twitter Card, Schema.org
+- 📸 **Dernières photos** : Section dédiée en haut de la page d'accueil
+- 👥 **BuddyPress** : Intégration complète avec redirection profil
+- 🔧 **AJAX** : Filtrage photos, modèles par marque, carte interactive
+- 📊 **Compteur vues** : Incrémentation automatique des vues
+- 🎨 **Tailles images** : Formats optimisés (large, medium, thumb)
 
 ### Version 1.0.0 (2025-01-26)
 - Version initiale
