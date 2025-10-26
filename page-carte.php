@@ -1,8 +1,8 @@
 <?php
 /**
  * Template Name: Carte Interactive
- * Description: Carte interactive affichant les lieux de prise de vue
- * Version: 2.0.0 - Refactored
+ * Description: Carte interactive affichant les lieux de prise de vue avec OpenStreetMap
+ * Version: 2.1.0 - Functional Map
  *
  * @package ShiftZoneR
  */
@@ -19,7 +19,7 @@ get_header();
     </div>
 
     <div class="map-container-wrapper">
-        <div class="map-sidebar">
+        <div class="map-sidebar" id="map-sidebar">
             <div class="sidebar-header">
                 <h3>Filtres</h3>
                 <button id="close-sidebar" class="close-btn" aria-label="Fermer">✕</button>
@@ -36,12 +36,15 @@ get_header();
                             'taxonomy'   => 'car_brand',
                             'hide_empty' => true,
                         ) );
-                        foreach ( $brands as $brand ) :
-                            ?>
-                            <option value="<?php echo esc_attr( $brand->term_id ); ?>">
-                                <?php echo esc_html( $brand->name ); ?>
-                            </option>
-                        <?php endforeach; ?>
+                        if ( ! is_wp_error( $brands ) ) :
+                            foreach ( $brands as $brand ) :
+                                ?>
+                                <option value="<?php echo esc_attr( $brand->term_id ); ?>">
+                                    <?php echo esc_html( $brand->name ); ?>
+                                </option>
+                            <?php endforeach;
+                        endif;
+                        ?>
                     </select>
                 </div>
 
@@ -56,16 +59,12 @@ get_header();
                     <label for="map-author-filter">Contributeur</label>
                     <select id="map-author-filter" class="filter-select">
                         <option value="">Tous les contributeurs</option>
-                        <option value="1">Rafael</option>
                         <?php
                         $authors = get_users( array(
                             'who'     => 'authors',
                             'orderby' => 'display_name',
                         ) );
                         foreach ( $authors as $author ) :
-                            if ( $author->ID == 1 ) {
-                                continue;
-                            }
                             ?>
                             <option value="<?php echo esc_attr( $author->ID ); ?>">
                                 <?php echo esc_html( $author->display_name ); ?>
@@ -92,19 +91,19 @@ get_header();
             <div id="shiftzoner-map" class="interactive-map"></div>
 
             <div class="map-controls">
-                <button id="toggle-sidebar" class="control-btn" aria-label="Afficher/Masquer les filtres">
+                <button id="toggle-sidebar" class="control-btn" aria-label="Afficher/Masquer les filtres" title="Afficher/Masquer les filtres">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
                     </svg>
                 </button>
 
-                <button id="locate-me" class="control-btn" aria-label="Me localiser">
+                <button id="locate-me" class="control-btn" aria-label="Me localiser" title="Me localiser">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
                     </svg>
                 </button>
 
-                <button id="fullscreen-map" class="control-btn" aria-label="Plein écran">
+                <button id="fullscreen-map" class="control-btn" aria-label="Plein écran" title="Plein écran">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                     </svg>
@@ -112,8 +111,7 @@ get_header();
             </div>
 
             <div class="map-stats">
-                <span id="photos-count">0 photos</span>
-                <span id="locations-count">sur la carte</span>
+                <span id="photos-count">Chargement...</span>
             </div>
         </div>
     </div>
@@ -121,6 +119,13 @@ get_header();
 
 <script>
 (function() {
+    // Vérifier que Leaflet est chargé
+    if (typeof L === 'undefined') {
+        console.error('Leaflet n\'est pas chargé');
+        document.getElementById('photos-count').textContent = 'Erreur: Leaflet non disponible';
+        return;
+    }
+
     // Variables
     let map;
     let markers = [];
@@ -130,16 +135,35 @@ get_header();
     function initMap() {
         // Centre de la France par défaut
         const defaultCenter = [46.603354, 1.888334];
+        const defaultZoom = 6;
 
-        map = L.map('shiftzoner-map').setView(defaultCenter, 6);
+        try {
+            map = L.map('shiftzoner-map', {
+                center: defaultCenter,
+                zoom: defaultZoom,
+                zoomControl: false
+            });
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19
-        }).addTo(map);
+            // Ajouter les tuiles OpenStreetMap
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19,
+                minZoom: 3
+            }).addTo(map);
 
-        // Charger les photos avec GPS
-        loadMapPhotos();
+            // Ajouter le contrôle de zoom
+            L.control.zoom({
+                position: 'topright'
+            }).addTo(map);
+
+            console.log('Carte initialisée avec succès');
+
+            // Charger les photos avec GPS
+            loadMapPhotos();
+        } catch (error) {
+            console.error('Erreur lors de l\'initialisation de la carte:', error);
+            document.getElementById('photos-count').textContent = 'Erreur d\'initialisation';
+        }
     }
 
     // Charger les photos
@@ -147,6 +171,8 @@ get_header();
         const brandId = document.getElementById('map-brand-filter').value;
         const modelId = document.getElementById('map-model-filter').value;
         const authorId = document.getElementById('map-author-filter').value;
+
+        document.getElementById('photos-count').textContent = 'Chargement...';
 
         fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
             method: 'POST',
@@ -157,11 +183,19 @@ get_header();
         })
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
+            console.log('Données reçues:', data);
+            if (data.success && data.data && data.data.photos) {
                 photosData = data.data.photos;
                 updateMarkers();
                 updateStats();
+            } else {
+                console.error('Erreur dans les données:', data);
+                document.getElementById('photos-count').textContent = '0 photo';
             }
+        })
+        .catch(error => {
+            console.error('Erreur lors du chargement des photos:', error);
+            document.getElementById('photos-count').textContent = 'Erreur de chargement';
         });
     }
 
@@ -171,34 +205,62 @@ get_header();
         markers.forEach(marker => map.removeLayer(marker));
         markers = [];
 
+        if (!photosData || photosData.length === 0) {
+            console.log('Aucune photo avec GPS');
+            return;
+        }
+
+        console.log(`Affichage de ${photosData.length} photo(s)`);
+
         // Ajouter les nouveaux
         photosData.forEach(photo => {
+            if (!photo.lat || !photo.lng) return;
+
+            // Créer le marqueur avec icône personnalisée
+            const markerIcon = L.divIcon({
+                className: 'custom-marker',
+                html: `<div class="marker-pin" style="background: ${photo.user_color || '#E50914'}"></div>`,
+                iconSize: [30, 40],
+                iconAnchor: [15, 40],
+                popupAnchor: [0, -40]
+            });
+
             const marker = L.marker([photo.lat, photo.lng], {
-                icon: L.divIcon({
-                    className: 'custom-marker',
-                    html: `<div class="marker-pin" style="background: ${photo.user_color}"></div>`,
-                    iconSize: [30, 40],
-                    iconAnchor: [15, 40]
-                })
+                icon: markerIcon
             }).addTo(map);
+
+            // Ajouter le popup
+            const popupContent = `
+                <div class="map-popup">
+                    ${photo.thumbnail ? `<img src="${photo.thumbnail}" alt="${photo.title}" style="width:100%;border-radius:8px;margin-bottom:8px;">` : ''}
+                    <h4 style="margin:0 0 4px;font-size:14px;font-weight:700;">${photo.title}</h4>
+                    <p style="margin:0;font-size:12px;color:#999;">Par ${photo.author} • ${photo.date}</p>
+                    <a href="${photo.url}" style="display:inline-block;margin-top:8px;color:#E50914;font-weight:600;font-size:13px;">Voir la photo →</a>
+                </div>
+            `;
+
+            marker.bindPopup(popupContent, {
+                maxWidth: 250,
+                className: 'custom-popup'
+            });
 
             marker.on('click', () => showPhotoDetails(photo));
             markers.push(marker);
         });
 
-        // Ajuster la vue
+        // Ajuster la vue pour montrer tous les marqueurs
         if (markers.length > 0) {
             const group = L.featureGroup(markers);
             map.fitBounds(group.getBounds().pad(0.1));
         }
     }
 
-    // Afficher les détails d'une photo
+    // Afficher les détails d'une photo dans la sidebar
     function showPhotoDetails(photo) {
         const container = document.getElementById('nearby-photos');
         container.innerHTML = `
-            <div class="nearby-item" onclick="window.location.href='${photo.url}'">
-                <img src="${photo.thumbnail}" alt="${photo.title}" loading="lazy">
+            <div class="nearby-item" onclick="window.location.href='${photo.url}'" style="cursor:pointer;">
+                ${photo.thumbnail ? `<img src="${photo.thumbnail}" alt="${photo.title}" loading="lazy">` : ''}
                 <div class="nearby-item-title">${photo.title}</div>
                 <div class="nearby-item-meta">Par ${photo.author} • ${photo.date}</div>
             </div>
@@ -207,7 +269,11 @@ get_header();
 
     // Mettre à jour les stats
     function updateStats() {
-        document.getElementById('photos-count').textContent = `${photosData.length} photo${photosData.length > 1 ? 's' : ''}`;
+        const count = photosData.length;
+        const text = count === 0 ? 'Aucune photo' :
+                     count === 1 ? '1 photo sur la carte' :
+                     `${count} photos sur la carte`;
+        document.getElementById('photos-count').textContent = text;
     }
 
     // Charger les modèles par marque
@@ -230,7 +296,7 @@ get_header();
         })
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
+            if (data.success && data.data && data.data.models) {
                 modelSelect.innerHTML = '<option value="">Tous les modèles</option>';
                 data.data.models.forEach(model => {
                     const option = document.createElement('option');
@@ -240,7 +306,8 @@ get_header();
                 });
                 modelSelect.disabled = false;
             }
-        });
+        })
+        .catch(error => console.error('Erreur chargement modèles:', error));
     }
 
     // Event listeners
@@ -255,25 +322,40 @@ get_header();
         document.getElementById('map-brand-filter').value = '';
         document.getElementById('map-model-filter').value = '';
         document.getElementById('map-model-filter').disabled = true;
+        document.getElementById('map-model-filter').innerHTML = '<option value="">Sélectionnez une marque</option>';
         document.getElementById('map-author-filter').value = '';
         loadMapPhotos();
     });
 
     // Toggle sidebar
     document.getElementById('toggle-sidebar').addEventListener('click', () => {
-        document.querySelector('.map-sidebar').classList.toggle('hidden');
+        document.getElementById('map-sidebar').classList.toggle('hidden');
+        setTimeout(() => map.invalidateSize(), 300);
     });
 
     document.getElementById('close-sidebar').addEventListener('click', () => {
-        document.querySelector('.map-sidebar').classList.add('hidden');
+        document.getElementById('map-sidebar').classList.add('hidden');
+        setTimeout(() => map.invalidateSize(), 300);
     });
 
     // Locate me
     document.getElementById('locate-me').addEventListener('click', () => {
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(position => {
-                map.setView([position.coords.latitude, position.coords.longitude], 13);
-            });
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    map.setView([position.coords.latitude, position.coords.longitude], 13);
+                    L.marker([position.coords.latitude, position.coords.longitude])
+                        .addTo(map)
+                        .bindPopup('Vous êtes ici')
+                        .openPopup();
+                },
+                error => {
+                    console.error('Erreur de géolocalisation:', error);
+                    alert('Impossible de vous localiser');
+                }
+            );
+        } else {
+            alert('La géolocalisation n\'est pas supportée par votre navigateur');
         }
     });
 
@@ -281,17 +363,25 @@ get_header();
     document.getElementById('fullscreen-map').addEventListener('click', () => {
         const elem = document.querySelector('.map-container-wrapper');
         if (!document.fullscreenElement) {
-            elem.requestFullscreen();
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen();
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) {
+                elem.msRequestFullscreen();
+            }
         } else {
-            document.exitFullscreen();
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
         }
     });
 
-    // Init quand Leaflet est chargé
-    if (typeof L !== 'undefined') {
-        initMap();
+    // Initialiser quand la page est prête
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initMap);
     } else {
-        console.error('Leaflet not loaded');
+        initMap();
     }
 })();
 </script>
