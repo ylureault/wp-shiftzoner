@@ -646,6 +646,134 @@ function szr_get_model_photos_ajax() {
     ) );
 }
 
+// AJAX: Upload photo from brands page
+add_action( 'wp_ajax_szr_ajax_upload_photo', 'szr_ajax_upload_photo_ajax' );
+function szr_ajax_upload_photo_ajax() {
+    // Security check
+    if ( ! is_user_logged_in() ) {
+        wp_send_json_error( 'Vous devez être connecté pour uploader une photo' );
+        return;
+    }
+
+    if ( ! isset( $_POST['ajax_upload_nonce'] ) || ! wp_verify_nonce( $_POST['ajax_upload_nonce'], 'szr_ajax_upload' ) ) {
+        wp_send_json_error( 'Vérification de sécurité échouée' );
+        return;
+    }
+
+    // Validate inputs
+    $brand_id = intval( $_POST['brand_id'] ?? 0 );
+    $model_id = intval( $_POST['model_id'] ?? 0 );
+    $title    = sanitize_text_field( $_POST['title'] ?? '' );
+    $desc     = wp_kses_post( $_POST['description'] ?? '' );
+
+    if ( ! $brand_id || ! $model_id ) {
+        wp_send_json_error( 'Marque et modèle requis' );
+        return;
+    }
+
+    // Check file upload
+    if ( empty( $_FILES['photo'] ) || ! isset( $_FILES['photo']['tmp_name'] ) ) {
+        wp_send_json_error( 'Aucun fichier reçu' );
+        return;
+    }
+
+    $file = $_FILES['photo'];
+    if ( $file['error'] !== UPLOAD_ERR_OK ) {
+        wp_send_json_error( 'Erreur lors du téléchargement du fichier' );
+        return;
+    }
+
+    // Validate file type
+    $allowed_mimes = array( 'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/tiff' );
+    $mime = mime_content_type( $file['tmp_name'] );
+    if ( ! in_array( $mime, $allowed_mimes, true ) ) {
+        wp_send_json_error( 'Format de fichier non supporté. Utilisez JPG, PNG, GIF, WEBP ou TIFF.' );
+        return;
+    }
+
+    // Validate file size
+    $max_size = wp_max_upload_size();
+    if ( $file['size'] > $max_size ) {
+        wp_send_json_error( 'Fichier trop volumineux. Taille maximale: ' . size_format( $max_size ) );
+        return;
+    }
+
+    // Load required files
+    require_once ABSPATH . 'wp-admin/includes/file.php';
+    require_once ABSPATH . 'wp-admin/includes/image.php';
+    require_once ABSPATH . 'wp-admin/includes/media.php';
+
+    // Create post
+    $post_title = ! empty( $title ) ? $title : 'Photo — ' . current_time( 'Y-m-d H:i' );
+    $post_id = wp_insert_post( array(
+        'post_type'    => 'car_photo',
+        'post_status'  => 'publish',
+        'post_title'   => $post_title,
+        'post_content' => $desc,
+        'post_author'  => get_current_user_id(),
+    ), true );
+
+    if ( is_wp_error( $post_id ) ) {
+        wp_send_json_error( 'Erreur lors de la création de la publication' );
+        return;
+    }
+
+    // Set taxonomies
+    wp_set_post_terms( $post_id, array( $brand_id ), 'car_brand', false );
+    wp_set_post_terms( $post_id, array( $model_id ), 'car_model', false );
+
+    // Handle file upload
+    $upload = wp_handle_upload( $file, array( 'test_form' => false ) );
+
+    if ( isset( $upload['error'] ) ) {
+        wp_delete_post( $post_id, true );
+        wp_send_json_error( 'Erreur d\'upload: ' . $upload['error'] );
+        return;
+    }
+
+    // Create attachment
+    $filetype = wp_check_filetype( basename( $upload['file'] ), null );
+    $attachment = array(
+        'post_mime_type' => $filetype['type'],
+        'post_title'     => preg_replace( '/\.[^.]+$/', '', basename( $upload['file'] ) ),
+        'post_content'   => '',
+        'post_status'    => 'inherit',
+    );
+
+    $attach_id = wp_insert_attachment( $attachment, $upload['file'], $post_id );
+
+    if ( ! is_wp_error( $attach_id ) ) {
+        $attach_meta = wp_generate_attachment_metadata( $attach_id, $upload['file'] );
+        wp_update_attachment_metadata( $attach_id, $attach_meta );
+        set_post_thumbnail( $post_id, $attach_id );
+
+        // Extract EXIF GPS data if available
+        if ( function_exists( 'exif_read_data' ) ) {
+            $exif = @exif_read_data( $upload['file'], 'EXIF,GPS', true, false );
+            if ( $exif && isset( $exif['GPS'] ) ) {
+                $gps = $exif['GPS'];
+                if ( ! empty( $gps['GPSLatitude'] ) && ! empty( $gps['GPSLongitude'] ) ) {
+                    // Parse GPS coordinates (simplified)
+                    $lat = $gps['GPSLatitude'][0] + ( $gps['GPSLatitude'][1] / 60 ) + ( $gps['GPSLatitude'][2] / 3600 );
+                    if ( $gps['GPSLatitudeRef'] === 'S' ) $lat *= -1;
+
+                    $lng = $gps['GPSLongitude'][0] + ( $gps['GPSLongitude'][1] / 60 ) + ( $gps['GPSLongitude'][2] / 3600 );
+                    if ( $gps['GPSLongitudeRef'] === 'W' ) $lng *= -1;
+
+                    update_post_meta( $post_id, '_szr_gps_lat', $lat );
+                    update_post_meta( $post_id, '_szr_gps_lng', $lng );
+                }
+            }
+        }
+    }
+
+    wp_send_json_success( array(
+        'post_id'   => $post_id,
+        'post_url'  => get_permalink( $post_id ),
+        'message'   => 'Photo publiée avec succès !',
+    ) );
+}
+
 // 10. COMPTEUR VUES
 function shiftzoner_increment_views() {
     if ( is_singular( 'car_photo' ) ) {

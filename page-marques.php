@@ -162,6 +162,74 @@ $total_photos = wp_count_posts( 'car_photo' )->publish;
             </div>
         </div>
     </div>
+
+    <!-- Modal Upload AJAX -->
+    <?php if ( is_user_logged_in() ) : ?>
+    <div id="upload-modal" class="upload-modal" style="display:none;">
+        <div class="upload-modal-overlay" onclick="closeUploadModal()"></div>
+        <div class="upload-modal-content">
+            <div class="upload-modal-header">
+                <h3>Ajouter une photo</h3>
+                <button class="upload-modal-close" onclick="closeUploadModal()">×</button>
+            </div>
+            <div class="upload-modal-body">
+                <form id="ajax-upload-form" enctype="multipart/form-data">
+                    <?php wp_nonce_field( 'szr_ajax_upload', 'ajax_upload_nonce' ); ?>
+
+                    <div class="upload-modal-drop-zone" id="modal-drop-zone">
+                        <div id="modal-drop-content" class="modal-drop-content">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                            </svg>
+                            <p class="modal-drop-text">Glissez votre photo ici ou cliquez pour sélectionner</p>
+                            <p class="modal-drop-hint">JPG, PNG, GIF, WEBP ou TIFF - Max 10 MB</p>
+                        </div>
+                        <div id="modal-drop-preview" class="modal-drop-preview" style="display:none;">
+                            <img id="modal-preview-image" src="" alt="Preview">
+                            <button type="button" class="modal-preview-remove" id="modal-remove-photo">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                                </svg>
+                                Changer
+                            </button>
+                        </div>
+                        <input type="file" id="modal-photo-input" name="photo" accept="image/*" style="display:none;">
+                    </div>
+
+                    <input type="hidden" id="modal-brand-id" name="brand_id" value="">
+                    <input type="hidden" id="modal-model-id" name="model_id" value="">
+
+                    <div class="modal-form-field">
+                        <label for="modal-title">Titre (optionnel)</label>
+                        <input type="text" id="modal-title" name="title" class="modal-form-input" placeholder="Ex: Lamborghini Aventador SVJ">
+                    </div>
+
+                    <div class="modal-form-field">
+                        <label for="modal-description">Description (optionnelle)</label>
+                        <textarea id="modal-description" name="description" class="modal-form-textarea" rows="3" placeholder="Décrivez cette photo..."></textarea>
+                    </div>
+
+                    <div class="upload-modal-actions">
+                        <button type="button" class="modal-btn-secondary" onclick="closeUploadModal()">Annuler</button>
+                        <button type="submit" class="modal-btn-primary" id="modal-submit-btn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                            </svg>
+                            Publier
+                        </button>
+                    </div>
+
+                    <div id="modal-upload-progress" class="modal-upload-progress" style="display:none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="modal-progress-fill"></div>
+                        </div>
+                        <p class="progress-text" id="modal-progress-text">Upload en cours...</p>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <script>
@@ -365,39 +433,73 @@ $total_photos = wp_count_posts( 'car_photo' )->publish;
     };
 
     // Afficher les photos
-    function displayPhotos(photos) {
+    function displayPhotos(data) {
         document.getElementById('models-view').style.display = 'none';
         document.getElementById('photos-view').style.display = 'block';
 
+        const photos = data.photos || [];
+        const model = data.model || currentModel;
+
+        // Mettre à jour currentModel avec les données complètes
+        if (model) {
+            currentModel = model;
+        }
+
+        const isLoggedIn = <?php echo is_user_logged_in() ? 'true' : 'false'; ?>;
+
         let html = `
-            <div class="model-header" data-animate="fade-up">
-                ${currentBrand.logo ? `<img src="${currentBrand.logo}" alt="${currentBrand.name}" class="model-header-logo">` : ''}
-                <div>
-                    <h2>${currentBrand.name} ${currentModel.name}</h2>
-                    <p class="model-description">${photos.length} photo${photos.length > 1 ? 's' : ''} disponible${photos.length > 1 ? 's' : ''}</p>
+            <div class="photos-header" data-animate="fade-up">
+                <div class="photos-header-info">
+                    ${currentBrand.logo ? `<img src="${currentBrand.logo}" alt="${currentBrand.name}" class="model-header-logo">` : ''}
+                    <div>
+                        <h2>${currentBrand.name} ${currentModel.name}</h2>
+                        <p class="model-description">${photos.length} photo${photos.length > 1 ? 's' : ''} disponible${photos.length > 1 ? 's' : ''}</p>
+                    </div>
                 </div>
+                ${isLoggedIn ? `
+                    <button class="upload-photo-btn" onclick="openUploadModal()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                        Ajouter une photo
+                    </button>
+                ` : ''}
             </div>
-            <div class="photos-grid">
         `;
 
-        photos.forEach((photo, index) => {
+        if (photos.length === 0) {
             html += `
-                <div class="photo-card" data-animate="fade-up" data-delay="${index * 30}">
-                    <div class="photo-card-image">
-                        <img src="${photo.thumbnail}" alt="${photo.title}" loading="lazy">
-                    </div>
-                    <div class="photo-card-content">
-                        <h3 class="photo-card-title"><a href="${photo.url}">${photo.title}</a></h3>
-                        <div class="photo-card-meta">
-                            <span>Par ${photo.author}</span>
-                            <span>${photo.date}</span>
-                        </div>
-                    </div>
+                <div class="no-photos" data-animate="fade-up">
+                    <div class="no-photos-icon">📷</div>
+                    <h3>Aucune photo pour ce modèle</h3>
+                    <p>Soyez le premier à partager une photo de ${currentBrand.name} ${currentModel.name} !</p>
+                    ${isLoggedIn ? `<button class="cta-button" onclick="openUploadModal()">Ajouter une photo</button>` : ''}
                 </div>
             `;
-        });
+        } else {
+            html += '<div class="photos-grid">';
+            photos.forEach((photo, index) => {
+                html += `
+                    <div class="photo-card" data-animate="fade-up" data-delay="${index * 30}">
+                        <a href="${photo.url}" class="photo-card-link">
+                            <div class="photo-card-image">
+                                ${photo.thumbnail ? `<img src="${photo.thumbnail}" alt="${photo.title}" loading="lazy">` : '<div class="photo-placeholder">📷</div>'}
+                            </div>
+                            <div class="photo-card-content">
+                                <h3 class="photo-card-title">${photo.title}</h3>
+                                <div class="photo-card-meta">
+                                    <span>👤 ${photo.author}</span>
+                                    <span>❤️ ${photo.votes || 0}</span>
+                                    <span>👁️ ${photo.views || 0}</span>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                `;
+            });
+            html += '</div>';
+        }
 
-        html += '</div>';
         document.getElementById('photos-content').innerHTML = html;
 
         setTimeout(() => animateOnScroll(), 100);
@@ -570,6 +672,188 @@ $total_photos = wp_count_posts( 'car_photo' )->publish;
             document.getElementById('search-results').innerHTML = '';
         }
     });
+
+    <?php if ( is_user_logged_in() ) : ?>
+    // === MODAL UPLOAD AJAX ===
+    window.openUploadModal = function() {
+        const modal = document.getElementById('upload-modal');
+        if (!modal) return;
+
+        // Pré-remplir avec la marque et le modèle actuels
+        if (currentBrand && currentModel) {
+            document.getElementById('modal-brand-id').value = currentBrand.id;
+            document.getElementById('modal-model-id').value = currentModel.id;
+            document.getElementById('modal-title').value = `${currentBrand.name} ${currentModel.name}`;
+        }
+
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    };
+
+    window.closeUploadModal = function() {
+        const modal = document.getElementById('upload-modal');
+        if (!modal) return;
+
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+
+        // Reset form
+        document.getElementById('ajax-upload-form').reset();
+        document.getElementById('modal-drop-content').style.display = 'flex';
+        document.getElementById('modal-drop-preview').style.display = 'none';
+        document.getElementById('modal-preview-image').src = '';
+        document.getElementById('modal-upload-progress').style.display = 'none';
+    };
+
+    // Modal drop zone
+    const modalDropZone = document.getElementById('modal-drop-zone');
+    const modalDropContent = document.getElementById('modal-drop-content');
+    const modalDropPreview = document.getElementById('modal-drop-preview');
+    const modalPhotoInput = document.getElementById('modal-photo-input');
+    const modalPreviewImage = document.getElementById('modal-preview-image');
+    const modalRemoveBtn = document.getElementById('modal-remove-photo');
+
+    if (modalDropZone) {
+        modalDropZone.addEventListener('click', (e) => {
+            if (!e.target.closest('.modal-preview-remove')) {
+                modalPhotoInput.click();
+            }
+        });
+
+        modalPhotoInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                handleModalFile(e.target.files[0]);
+            }
+        });
+
+        ['dragenter', 'dragover'].forEach(evt => {
+            modalDropZone.addEventListener(evt, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                modalDropZone.classList.add('drag-over');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(evt => {
+            modalDropZone.addEventListener(evt, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                modalDropZone.classList.remove('drag-over');
+            });
+        });
+
+        modalDropZone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files && files[0]) {
+                modalPhotoInput.files = files;
+                handleModalFile(files[0]);
+            }
+        });
+
+        modalRemoveBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            modalPhotoInput.value = '';
+            modalDropContent.style.display = 'flex';
+            modalDropPreview.style.display = 'none';
+            modalPreviewImage.src = '';
+        });
+    }
+
+    function handleModalFile(file) {
+        if (!file.type.startsWith('image/')) {
+            alert('Veuillez sélectionner une image (JPG, PNG, GIF, WEBP ou TIFF)');
+            modalPhotoInput.value = '';
+            return;
+        }
+
+        const maxBytes = <?php echo wp_max_upload_size(); ?>;
+        if (file.size > maxBytes) {
+            const maxMB = (maxBytes / 1024 / 1024).toFixed(1);
+            const fileMB = (file.size / 1024 / 1024).toFixed(1);
+            alert(`Fichier trop volumineux (${fileMB} MB). Taille maximale: ${maxMB} MB`);
+            modalPhotoInput.value = '';
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            modalPreviewImage.src = e.target.result;
+            modalDropContent.style.display = 'none';
+            modalDropPreview.style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // Form submit
+    document.getElementById('ajax-upload-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        if (!modalPhotoInput.files || !modalPhotoInput.files[0]) {
+            alert('Veuillez sélectionner une photo');
+            return;
+        }
+
+        const formData = new FormData(this);
+        formData.append('action', 'szr_ajax_upload_photo');
+
+        const submitBtn = document.getElementById('modal-submit-btn');
+        const progressDiv = document.getElementById('modal-upload-progress');
+        const progressFill = document.getElementById('modal-progress-fill');
+        const progressText = document.getElementById('modal-progress-text');
+
+        submitBtn.disabled = true;
+        progressDiv.style.display = 'block';
+
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percent = (e.loaded / e.total) * 100;
+                progressFill.style.width = percent + '%';
+                progressText.textContent = `Upload en cours... ${Math.round(percent)}%`;
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            if (xhr.status === 200) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.success) {
+                        progressText.textContent = 'Photo publiée avec succès !';
+                        setTimeout(() => {
+                            closeUploadModal();
+                            // Recharger les photos du modèle actuel
+                            if (currentModel && currentModel.id) {
+                                loadModel(currentModel.id, currentModel.name, false);
+                            }
+                        }, 1000);
+                    } else {
+                        alert('Erreur: ' + (response.data || 'Échec de l\'upload'));
+                        submitBtn.disabled = false;
+                        progressDiv.style.display = 'none';
+                    }
+                } catch (err) {
+                    alert('Erreur lors du traitement de la réponse');
+                    submitBtn.disabled = false;
+                    progressDiv.style.display = 'none';
+                }
+            } else {
+                alert('Erreur serveur: ' + xhr.status);
+                submitBtn.disabled = false;
+                progressDiv.style.display = 'none';
+            }
+        });
+
+        xhr.addEventListener('error', () => {
+            alert('Erreur réseau lors de l\'upload');
+            submitBtn.disabled = false;
+            progressDiv.style.display = 'none';
+        });
+
+        xhr.open('POST', '<?php echo admin_url( 'admin-ajax.php' ); ?>');
+        xhr.send(formData);
+    });
+    <?php endif; ?>
 })();
 </script>
 
