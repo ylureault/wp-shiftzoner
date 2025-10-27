@@ -54,6 +54,17 @@ function shiftzoner_theme_setup() {
 add_action('after_setup_theme', 'shiftzoner_theme_setup');
 
 /**
+ * ShiftZoneR - Functions personnalisées
+ * À ajouter dans le fichier functions.php de votre thème
+ * Version: 1.0
+ */
+
+// Sécurité
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+/**
  * ===============================================
  * 1. ENREGISTREMENT DES TAXONOMIES ET POST TYPES
  * ===============================================
@@ -2276,9 +2287,6 @@ function shiftzoner_handle_avatar_update() {
     ));
 }
 
-
-/**
- * ===============================================
  * BANDEAU RSS ACTUALITÉS
  * ===============================================
  */
