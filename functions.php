@@ -509,50 +509,54 @@ function szr_get_brand_models_ajax() {
     $brand_logo = $brand_logo_id ? wp_get_attachment_image_url( $brand_logo_id, 'medium' ) : '';
     $brand_description = term_description( $brand_id, 'car_brand' );
 
-    // Get models for this brand
-    $models = get_terms( array(
-        'taxonomy'   => 'car_model',
-        'hide_empty' => true,
-        'meta_query' => array(
-            array(
-                'key'   => 'brand_id',
-                'value' => $brand_id,
-            ),
-        ),
-        'orderby'    => 'name',
-        'order'      => 'ASC',
-    ) );
+    // IMPORTANT: Les modèles sont stockés hiérarchiquement dans car_model
+    // 1. Trouver le parent dans car_model qui correspond à cette marque
+    $parent_term = get_term_by( 'slug', $brand->slug, 'car_model' );
+    if ( ! $parent_term || is_wp_error( $parent_term ) ) {
+        $parent_term = get_term_by( 'name', $brand->name, 'car_model' );
+    }
 
     $models_data = array();
 
-    if ( ! is_wp_error( $models ) ) {
-        foreach ( $models as $model ) {
-            // Get first photo for thumbnail
-            $photo_query = new WP_Query( array(
-                'post_type'      => 'car_photo',
-                'posts_per_page' => 1,
-                'tax_query'      => array(
-                    array(
-                        'taxonomy' => 'car_model',
-                        'field'    => 'term_id',
-                        'terms'    => $model->term_id,
+    if ( $parent_term && ! is_wp_error( $parent_term ) ) {
+        // 2. Récupérer tous les enfants (modèles) de ce parent
+        $models = get_terms( array(
+            'taxonomy'   => 'car_model',
+            'hide_empty' => false,
+            'parent'     => $parent_term->term_id,
+            'orderby'    => 'name',
+            'order'      => 'ASC',
+        ) );
+
+        if ( ! is_wp_error( $models ) && ! empty( $models ) ) {
+            foreach ( $models as $model ) {
+                // Get first photo for thumbnail
+                $photo_query = new WP_Query( array(
+                    'post_type'      => 'car_photo',
+                    'posts_per_page' => 1,
+                    'tax_query'      => array(
+                        array(
+                            'taxonomy' => 'car_model',
+                            'field'    => 'term_id',
+                            'terms'    => $model->term_id,
+                        ),
                     ),
-                ),
-            ) );
+                ) );
 
-            $thumbnail = '';
-            if ( $photo_query->have_posts() ) {
-                $photo_query->the_post();
-                $thumbnail = get_the_post_thumbnail_url( get_the_ID(), 'medium' );
-                wp_reset_postdata();
+                $thumbnail = '';
+                if ( $photo_query->have_posts() ) {
+                    $photo_query->the_post();
+                    $thumbnail = get_the_post_thumbnail_url( get_the_ID(), 'medium' );
+                    wp_reset_postdata();
+                }
+
+                $models_data[] = array(
+                    'id'        => $model->term_id,
+                    'name'      => $model->name,
+                    'count'     => $model->count,
+                    'thumbnail' => $thumbnail,
+                );
             }
-
-            $models_data[] = array(
-                'id'        => $model->term_id,
-                'name'      => $model->name,
-                'count'     => $model->count,
-                'thumbnail' => $thumbnail,
-            );
         }
     }
 
