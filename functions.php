@@ -12,6 +12,49 @@ if (!defined('ABSPATH')) {
 
 /**
  * ===============================================
+ * 0. CONFIGURATION DE BASE DU THÈME
+ * ===============================================
+ */
+
+function shiftzoner_theme_setup() {
+    // Support des titres gérés par WordPress
+    add_theme_support('title-tag');
+
+    // Support des images à la une
+    add_theme_support('post-thumbnails');
+
+    // Support du logo personnalisé
+    add_theme_support('custom-logo', array(
+        'height'      => 100,
+        'width'       => 400,
+        'flex-height' => true,
+        'flex-width'  => true,
+    ));
+
+    // Support HTML5
+    add_theme_support('html5', array(
+        'search-form',
+        'comment-form',
+        'comment-list',
+        'gallery',
+        'caption',
+        'style',
+        'script',
+    ));
+
+    // Support des menus
+    register_nav_menus(array(
+        'primary' => __('Menu Principal', 'shiftzoner'),
+        'footer'  => __('Menu Footer', 'shiftzoner'),
+    ));
+
+    // Support du RSS
+    add_theme_support('automatic-feed-links');
+}
+add_action('after_setup_theme', 'shiftzoner_theme_setup');
+
+/**
+ * ===============================================
  * 1. ENREGISTREMENT DES TAXONOMIES ET POST TYPES
  * ===============================================
  */
