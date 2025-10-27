@@ -36,7 +36,7 @@ $community_photos = new WP_Query( array(
             <p><?php echo esc_html( get_theme_mod( 'shiftzoner_hero_subtitle', 'Rejoignez la communauté ShiftZoneR. Partagez vos plus beaux clichés automobiles, découvrez des passionnés et échangez autour de votre passion.' ) ); ?></p>
             <div class="hero-buttons">
                 <?php if ( is_user_logged_in() ) : ?>
-                    <a href="<?php echo esc_url( home_url( '/soumettre-photo/' ) ); ?>" class="cta-button">Publier une photo</a>
+                    <a href="<?php echo esc_url( home_url( '/soumettre-ma-photo/' ) ); ?>" class="cta-button">Publier une photo</a>
                     <a href="<?php echo esc_url( home_url( '/galerie/' ) ); ?>" class="secondary-button">Explorer la Galerie</a>
                 <?php else : ?>
                     <a href="<?php echo esc_url( wp_registration_url() ); ?>" class="cta-button">Rejoindre Maintenant</a>
@@ -300,7 +300,7 @@ $community_photos = new WP_Query( array(
         <h2 class="fade-in"><?php echo esc_html( get_theme_mod( 'shiftzoner_cta_title', 'Prêt À Rejoindre La Communauté ?' ) ); ?></h2>
         <p class="fade-in"><?php echo esc_html( get_theme_mod( 'shiftzoner_cta_subtitle', 'Créez votre compte gratuitement et commencez à partager vos plus belles créations dès aujourd\'hui.' ) ); ?></p>
         <?php if ( is_user_logged_in() ) : ?>
-            <a href="<?php echo esc_url( home_url( '/soumettre-photo/' ) ); ?>" class="cta-button">Publier une photo</a>
+            <a href="<?php echo esc_url( home_url( '/soumettre-ma-photo/' ) ); ?>" class="cta-button">Publier une photo</a>
         <?php else : ?>
             <a href="<?php echo esc_url( wp_registration_url() ); ?>" class="cta-button">S'inscrire Gratuitement</a>
         <?php endif; ?>

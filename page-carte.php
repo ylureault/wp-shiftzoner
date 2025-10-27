@@ -19,7 +19,7 @@ get_header();
                     <p class="map-subtitle">Explorez les lieux de prise de vue des photos ShiftZoneR</p>
                 </div>
                 <?php if ( is_user_logged_in() ) : ?>
-                <a href="<?php echo esc_url( home_url( '/soumettre-photo/' ) ); ?>" class="map-upload-btn">
+                <a href="<?php echo esc_url( home_url( '/soumettre-ma-photo/' ) ); ?>" class="map-upload-btn">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                     </svg>

@@ -40,7 +40,7 @@
 
             <div class="nav-actions">
                 <?php if ( is_user_logged_in() ) : ?>
-                    <a href="<?php echo esc_url( home_url( '/soumettre-photo/' ) ); ?>" class="cta-button">
+                    <a href="<?php echo esc_url( home_url( '/soumettre-ma-photo/' ) ); ?>" class="cta-button">
                         Publier une photo
                     </a>
                     <a href="<?php echo esc_url( wp_logout_url( home_url( '/' ) ) ); ?>" class="nav-logout">
@@ -131,7 +131,7 @@
 
             <div class="mobile-nav-actions">
                 <?php if ( is_user_logged_in() ) : ?>
-                    <a href="<?php echo esc_url( home_url( '/soumettre-photo/' ) ); ?>" class="mobile-cta-button">
+                    <a href="<?php echo esc_url( home_url( '/soumettre-ma-photo/' ) ); ?>" class="mobile-cta-button">
                         <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/></svg>
                         Publier une photo
                     </a>

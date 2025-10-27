@@ -493,14 +493,14 @@ function szr_get_brand_models_ajax() {
     $brand_id = intval( $_POST['brand_id'] ?? 0 );
 
     if ( ! $brand_id ) {
-        wp_send_json_error( 'Invalid brand ID' );
+        wp_send_json_error( array( 'message' => 'Invalid brand ID' ) );
         return;
     }
 
     $brand = get_term( $brand_id, 'car_brand' );
 
     if ( is_wp_error( $brand ) || ! $brand ) {
-        wp_send_json_error( 'Brand not found' );
+        wp_send_json_error( array( 'message' => 'Brand not found' ) );
         return;
     }
 
@@ -509,17 +509,17 @@ function szr_get_brand_models_ajax() {
     $brand_logo = $brand_logo_id ? wp_get_attachment_image_url( $brand_logo_id, 'medium' ) : '';
     $brand_description = term_description( $brand_id, 'car_brand' );
 
-    // IMPORTANT: Les modèles sont stockés hiérarchiquement dans car_model
-    // 1. Trouver le parent dans car_model qui correspond à cette marque
+    $models_data = array();
+
+    // MÉTHODE 1: Chercher hiérarchiquement dans car_model
+    // Trouver le parent dans car_model qui correspond à cette marque
     $parent_term = get_term_by( 'slug', $brand->slug, 'car_model' );
     if ( ! $parent_term || is_wp_error( $parent_term ) ) {
         $parent_term = get_term_by( 'name', $brand->name, 'car_model' );
     }
 
-    $models_data = array();
-
     if ( $parent_term && ! is_wp_error( $parent_term ) ) {
-        // 2. Récupérer tous les enfants (modèles) de ce parent
+        // Récupérer tous les enfants (modèles) de ce parent
         $models = get_terms( array(
             'taxonomy'   => 'car_model',
             'hide_empty' => false,
@@ -530,32 +530,26 @@ function szr_get_brand_models_ajax() {
 
         if ( ! is_wp_error( $models ) && ! empty( $models ) ) {
             foreach ( $models as $model ) {
-                // Get first photo for thumbnail
-                $photo_query = new WP_Query( array(
-                    'post_type'      => 'car_photo',
-                    'posts_per_page' => 1,
-                    'tax_query'      => array(
-                        array(
-                            'taxonomy' => 'car_model',
-                            'field'    => 'term_id',
-                            'terms'    => $model->term_id,
-                        ),
-                    ),
-                ) );
+                $models_data[] = process_model_data( $model );
+            }
+        }
+    }
 
-                $thumbnail = '';
-                if ( $photo_query->have_posts() ) {
-                    $photo_query->the_post();
-                    $thumbnail = get_the_post_thumbnail_url( get_the_ID(), 'medium' );
-                    wp_reset_postdata();
+    // MÉTHODE 2 (FALLBACK): Si aucun modèle trouvé, chercher par meta _szr_model_brand
+    if ( empty( $models_data ) ) {
+        $all_models = get_terms( array(
+            'taxonomy'   => 'car_model',
+            'hide_empty' => false,
+            'orderby'    => 'name',
+            'order'      => 'ASC',
+        ) );
+
+        if ( ! is_wp_error( $all_models ) ) {
+            foreach ( $all_models as $model ) {
+                $model_brand_id = get_term_meta( $model->term_id, '_szr_model_brand', true );
+                if ( intval( $model_brand_id ) === $brand_id ) {
+                    $models_data[] = process_model_data( $model );
                 }
-
-                $models_data[] = array(
-                    'id'        => $model->term_id,
-                    'name'      => $model->name,
-                    'count'     => $model->count,
-                    'thumbnail' => $thumbnail,
-                );
             }
         }
     }
@@ -571,6 +565,37 @@ function szr_get_brand_models_ajax() {
         ),
         'models' => $models_data,
     ) );
+}
+
+// Helper function to process model data
+function process_model_data( $model ) {
+    // Get first photo for thumbnail
+    $photo_query = new WP_Query( array(
+        'post_type'      => 'car_photo',
+        'posts_per_page' => 1,
+        'tax_query'      => array(
+            array(
+                'taxonomy' => 'car_model',
+                'field'    => 'term_id',
+                'terms'    => $model->term_id,
+            ),
+        ),
+    ) );
+
+    $thumbnail = '';
+    if ( $photo_query->have_posts() ) {
+        $photo_query->the_post();
+        $thumbnail = get_the_post_thumbnail_url( get_the_ID(), 'medium' );
+        wp_reset_postdata();
+    }
+
+    return array(
+        'id'        => $model->term_id,
+        'name'      => $model->name,
+        'slug'      => $model->slug,
+        'count'     => $model->count,
+        'thumbnail' => $thumbnail,
+    );
 }
 
 // AJAX: Get model photos for brands page
@@ -823,7 +848,7 @@ function shiftzoner_add_seo_meta() {
     } elseif ( is_page( 'communaute' ) ) {
         $title = 'Communauté ShiftZoneR - Passionnés d\'Automobile';
         $description = 'Rejoignez la communauté ShiftZoneR. Rencontrez des passionnés, partagez vos photos, participez aux événements et challenges.';
-    } elseif ( is_page( 'soumettre-photo' ) ) {
+    } elseif ( is_page( 'soumettre-ma-photo' ) || is_page( 'soumettre-photo' ) ) {
         $title = 'Publier une Photo - Partagez Votre Passion';
         $description = 'Partagez vos plus belles photos automobiles avec la communauté ShiftZoneR. Upload facile, reconnaissance EXIF, géolocalisation automatique.';
     } elseif ( is_tax( 'car_brand' ) ) {

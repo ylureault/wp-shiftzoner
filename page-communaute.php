@@ -294,7 +294,7 @@ $top_voted = get_posts( array(
             <div class="cta-box">
                 <h2>Partagez Votre Passion</h2>
                 <p>Rejoignez les meilleurs contributeurs en partageant vos plus belles photos automobiles</p>
-                <a href="<?php echo esc_url( home_url( '/soumettre-photo/' ) ); ?>" class="cta-button-large">
+                <a href="<?php echo esc_url( home_url( '/soumettre-ma-photo/' ) ); ?>" class="cta-button-large">
                     <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/>
                     </svg>

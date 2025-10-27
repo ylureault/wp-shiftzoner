@@ -39,7 +39,7 @@
                 <?php if ( function_exists( 'bbp_is_active' ) ) : ?>
                 <li><a href="<?php echo esc_url( get_post_type_archive_link( 'forum' ) ); ?>">Forum</a></li>
                 <?php endif; ?>
-                <li><a href="<?php echo esc_url( home_url( '/soumettre-photo/' ) ); ?>">Publier une photo</a></li>
+                <li><a href="<?php echo esc_url( home_url( '/soumettre-ma-photo/' ) ); ?>">Publier une photo</a></li>
                 <?php if ( function_exists( 'bp_is_active' ) ) : ?>
                 <li><a href="<?php echo esc_url( bp_get_members_directory_permalink() ); ?>">Membres</a></li>
                 <?php endif; ?>
