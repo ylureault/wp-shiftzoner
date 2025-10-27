@@ -1563,3 +1563,285 @@ function shiftzoner_mobile_menu_icons( $item_id, $url, $text ) {
 
     return $icon;
 }
+
+// ========================================
+// CUSTOM REGISTRATION HANDLER
+// ========================================
+add_action( 'wp_ajax_szr_custom_registration', 'szr_handle_custom_registration' );
+add_action( 'wp_ajax_nopriv_szr_custom_registration', 'szr_handle_custom_registration' );
+function szr_handle_custom_registration() {
+    // Verify nonce
+    if ( ! isset( $_POST['szr_register_nonce'] ) || ! wp_verify_nonce( $_POST['szr_register_nonce'], 'szr_register' ) ) {
+        wp_send_json_error( array( 'message' => 'Erreur de sécurité' ) );
+    }
+
+    // Get form data
+    $username = sanitize_user( $_POST['username'] ?? '' );
+    $email = sanitize_email( $_POST['email'] ?? '' );
+    $password = $_POST['password'] ?? '';
+
+    // Validation
+    $errors = array();
+
+    if ( empty( $username ) || strlen( $username ) < 3 ) {
+        $errors[] = 'Le nom d\'utilisateur doit contenir au moins 3 caractères';
+    }
+
+    if ( username_exists( $username ) ) {
+        $errors[] = 'Ce nom d\'utilisateur est déjà utilisé';
+    }
+
+    if ( ! is_email( $email ) ) {
+        $errors[] = 'Adresse e-mail invalide';
+    }
+
+    if ( email_exists( $email ) ) {
+        $errors[] = 'Cette adresse e-mail est déjà utilisée';
+    }
+
+    if ( empty( $password ) || strlen( $password ) < 8 ) {
+        $errors[] = 'Le mot de passe doit contenir au moins 8 caractères';
+    }
+
+    if ( ! empty( $errors ) ) {
+        wp_send_json_error( array( 'message' => implode( '<br>', $errors ) ) );
+    }
+
+    // Create user
+    $user_id = wp_create_user( $username, $password, $email );
+
+    if ( is_wp_error( $user_id ) ) {
+        wp_send_json_error( array( 'message' => $user_id->get_error_message() ) );
+    }
+
+    // Set user role
+    $user = new WP_User( $user_id );
+    $user->set_role( 'subscriber' );
+
+    // Generate random user color
+    $colors = array( '#E50914', '#00AEEF', '#FFD700', '#00C851', '#FF8800', '#8B00FF', '#FF1493' );
+    $random_color = $colors[ array_rand( $colors ) ];
+    update_user_meta( $user_id, '_szr_user_color', $random_color );
+
+    // Initialize karma
+    update_user_meta( $user_id, '_szr_karma', 0 );
+
+    // Auto login
+    wp_set_current_user( $user_id );
+    wp_set_auth_cookie( $user_id );
+
+    // Send welcome email
+    $subject = 'Bienvenue sur ShiftZoneR !';
+    $message = "Bonjour {$username},\n\n";
+    $message .= "Bienvenue sur ShiftZoneR, la communauté des passionnés d'automobile !\n\n";
+    $message .= "Vous pouvez dès maintenant :\n";
+    $message .= "- Publier vos photos de voitures\n";
+    $message .= "- Explorer la galerie et la carte interactive\n";
+    $message .= "- Rejoindre des groupes de modèles\n";
+    $message .= "- Interagir avec la communauté\n\n";
+    $message .= "À bientôt sur ShiftZoneR !\n";
+    wp_mail( $email, $subject, $message );
+
+    wp_send_json_success( array(
+        'message' => 'Compte créé avec succès ! Bienvenue sur ShiftZoneR 🎉',
+        'redirect' => home_url( '/' )
+    ) );
+}
+
+// ========================================
+// CAR GROUPS CUSTOM POST TYPE
+// ========================================
+add_action( 'init', 'szr_register_car_groups_post_type' );
+function szr_register_car_groups_post_type() {
+    $labels = array(
+        'name'                  => 'Groupes Auto',
+        'singular_name'         => 'Groupe Auto',
+        'menu_name'             => 'Groupes',
+        'add_new'               => 'Ajouter un groupe',
+        'add_new_item'          => 'Ajouter un nouveau groupe',
+        'edit_item'             => 'Modifier le groupe',
+        'new_item'              => 'Nouveau groupe',
+        'view_item'             => 'Voir le groupe',
+        'search_items'          => 'Rechercher des groupes',
+        'not_found'             => 'Aucun groupe trouvé',
+        'not_found_in_trash'    => 'Aucun groupe dans la corbeille'
+    );
+
+    $args = array(
+        'labels'              => $labels,
+        'public'              => true,
+        'has_archive'         => true,
+        'publicly_queryable'  => true,
+        'show_ui'             => true,
+        'show_in_menu'        => true,
+        'show_in_rest'        => true,
+        'menu_icon'           => 'dashicons-groups',
+        'supports'            => array( 'title', 'editor', 'thumbnail', 'author', 'comments' ),
+        'rewrite'             => array( 'slug' => 'groupe' ),
+        'capability_type'     => 'post',
+        'menu_position'       => 6
+    );
+
+    register_post_type( 'car_group', $args );
+}
+
+// Add meta boxes for car groups
+add_action( 'add_meta_boxes', 'szr_add_car_group_meta_boxes' );
+function szr_add_car_group_meta_boxes() {
+    add_meta_box(
+        'car_group_details',
+        'Détails du Groupe',
+        'szr_car_group_details_callback',
+        'car_group',
+        'normal',
+        'high'
+    );
+}
+
+function szr_car_group_details_callback( $post ) {
+    wp_nonce_field( 'szr_save_car_group', 'szr_car_group_nonce' );
+
+    $brand_id = get_post_meta( $post->ID, '_szr_group_brand_id', true );
+    $model_id = get_post_meta( $post->ID, '_szr_group_model_id', true );
+    $member_count = count( get_post_meta( $post->ID, '_szr_group_members', true ) ?: array() );
+
+    $brands = get_terms( array( 'taxonomy' => 'car_brand', 'hide_empty' => false ) );
+
+    ?>
+    <div style="display:grid;gap:20px;">
+        <div>
+            <label style="display:block;margin-bottom:5px;font-weight:600;">Marque associée:</label>
+            <select name="szr_group_brand_id" style="width:100%;padding:8px;">
+                <option value="">Sélectionnez une marque</option>
+                <?php foreach ( $brands as $brand ) : ?>
+                    <option value="<?php echo esc_attr( $brand->term_id ); ?>" <?php selected( $brand_id, $brand->term_id ); ?>>
+                        <?php echo esc_html( $brand->name ); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+
+        <div>
+            <label style="display:block;margin-bottom:5px;font-weight:600;">ID du modèle:</label>
+            <input type="number" name="szr_group_model_id" value="<?php echo esc_attr( $model_id ); ?>" style="width:100%;padding:8px;">
+            <p style="margin-top:5px;color:#666;font-size:13px;">ID du terme dans la taxonomie car_model</p>
+        </div>
+
+        <div>
+            <label style="display:block;margin-bottom:5px;font-weight:600;">Nombre de membres:</label>
+            <strong style="font-size:18px;color:#E50914;"><?php echo $member_count; ?></strong>
+        </div>
+    </div>
+    <?php
+}
+
+// Save car group meta
+add_action( 'save_post_car_group', 'szr_save_car_group_meta' );
+function szr_save_car_group_meta( $post_id ) {
+    if ( ! isset( $_POST['szr_car_group_nonce'] ) || ! wp_verify_nonce( $_POST['szr_car_group_nonce'], 'szr_save_car_group' ) ) {
+        return;
+    }
+
+    if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+        return;
+    }
+
+    if ( ! current_user_can( 'edit_post', $post_id ) ) {
+        return;
+    }
+
+    if ( isset( $_POST['szr_group_brand_id'] ) ) {
+        update_post_meta( $post_id, '_szr_group_brand_id', intval( $_POST['szr_group_brand_id'] ) );
+    }
+
+    if ( isset( $_POST['szr_group_model_id'] ) ) {
+        update_post_meta( $post_id, '_szr_group_model_id', intval( $_POST['szr_group_model_id'] ) );
+    }
+}
+
+// Join/Leave Group AJAX Handler
+add_action( 'wp_ajax_szr_toggle_group_membership', 'szr_toggle_group_membership' );
+function szr_toggle_group_membership() {
+    if ( ! is_user_logged_in() ) {
+        wp_send_json_error( array( 'message' => 'Vous devez être connecté' ) );
+    }
+
+    $group_id = intval( $_POST['group_id'] ?? 0 );
+    $user_id = get_current_user_id();
+
+    if ( ! $group_id ) {
+        wp_send_json_error( array( 'message' => 'ID de groupe invalide' ) );
+    }
+
+    $members = get_post_meta( $group_id, '_szr_group_members', true );
+    if ( ! is_array( $members ) ) {
+        $members = array();
+    }
+
+    $is_member = in_array( $user_id, $members );
+
+    if ( $is_member ) {
+        // Leave group
+        $members = array_diff( $members, array( $user_id ) );
+        $action = 'left';
+        $message = 'Vous avez quitté le groupe';
+    } else {
+        // Join group
+        $members[] = $user_id;
+        $action = 'joined';
+        $message = 'Vous avez rejoint le groupe !';
+    }
+
+    update_post_meta( $group_id, '_szr_group_members', array_values( $members ) );
+
+    wp_send_json_success( array(
+        'action' => $action,
+        'message' => $message,
+        'member_count' => count( $members ),
+        'is_member' => ! $is_member
+    ) );
+}
+
+// Get groups for a model AJAX Handler
+add_action( 'wp_ajax_szr_get_model_groups', 'szr_get_model_groups' );
+add_action( 'wp_ajax_nopriv_szr_get_model_groups', 'szr_get_model_groups' );
+function szr_get_model_groups() {
+    $model_id = intval( $_POST['model_id'] ?? 0 );
+
+    if ( ! $model_id ) {
+        wp_send_json_error( array( 'message' => 'ID modèle invalide' ) );
+    }
+
+    $groups = get_posts( array(
+        'post_type' => 'car_group',
+        'posts_per_page' => -1,
+        'post_status' => 'publish',
+        'meta_query' => array(
+            array(
+                'key' => '_szr_group_model_id',
+                'value' => $model_id,
+                'compare' => '='
+            )
+        )
+    ) );
+
+    $groups_data = array();
+    $user_id = get_current_user_id();
+
+    foreach ( $groups as $group ) {
+        $members = get_post_meta( $group->ID, '_szr_group_members', true ) ?: array();
+        $is_member = is_user_logged_in() && in_array( $user_id, $members );
+
+        $groups_data[] = array(
+            'id' => $group->ID,
+            'title' => $group->post_title,
+            'excerpt' => get_the_excerpt( $group ),
+            'url' => get_permalink( $group ),
+            'member_count' => count( $members ),
+            'is_member' => $is_member,
+            'author' => get_the_author_meta( 'display_name', $group->post_author )
+        );
+    }
+
+    wp_send_json_success( array( 'groups' => $groups_data ) );
+}
