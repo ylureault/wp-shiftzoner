@@ -535,18 +535,20 @@ function shiftzoner_map_shortcode() {
     </div>
 
     <script>
-    jQuery(document).ready(function($) {
-        // Vérifier que Leaflet est chargé
-        if (typeof L === 'undefined') {
-            console.error('Leaflet n\'est pas chargé');
-            $('#shiftzoner-map').hide();
-            $('#shiftzoner-map-error').show();
-            return;
-        }
+    (function() {
+        function initLeafletMap() {
+            // Vérifier que Leaflet est chargé
+            if (typeof L === 'undefined') {
+                console.error('Leaflet n\'est pas chargé, nouvelle tentative dans 100ms');
+                setTimeout(initLeafletMap, 100);
+                return;
+            }
 
-        try {
-            // Initialiser la carte Leaflet
-            var map = L.map('shiftzoner-map').setView([48.8566, 2.3522], 6);
+            var $ = jQuery;
+
+            try {
+                // Initialiser la carte Leaflet
+                var map = L.map('shiftzoner-map').setView([48.8566, 2.3522], 6);
 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
@@ -581,10 +583,19 @@ function shiftzoner_map_shortcode() {
             });
         } catch (error) {
             console.error('Erreur lors de l\'initialisation de la carte:', error);
+            var $ = jQuery;
             $('#shiftzoner-map').hide();
             $('#shiftzoner-map-error').show();
         }
-    });
+    }
+
+    // Démarrer l'initialisation
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initLeafletMap);
+    } else {
+        initLeafletMap();
+    }
+    })();
     </script>
     <?php
     return ob_get_clean();
@@ -819,9 +830,9 @@ function shiftzoner_get_filter_form() {
 add_action('wp_enqueue_scripts', 'shiftzoner_enqueue_assets');
 
 function shiftzoner_enqueue_assets() {
-    // Leaflet pour la carte (avec intégrité et crossorigin pour sécurité)
+    // Leaflet pour la carte (chargé dans le header pour être disponible immédiatement)
     wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
-    wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
+    wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', false);
 
     // jQuery
     wp_enqueue_script('jquery');
