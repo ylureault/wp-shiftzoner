@@ -11,6 +11,46 @@ if (!defined('ABSPATH')) {
 
 get_header();
 ?>
+<style>
+body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    background:#ffffff;
+    color:#0f172a;
+    margin:0;
+    padding:20px;
+    line-height:1.6;
+}
+.site-main{
+    max-width:800px;
+    margin:0 auto;
+}
+.entry-title{
+    font-size:2em;
+    margin-bottom:0.5em;
+}
+.entry-title a{
+    color:#0f172a;
+    text-decoration:none;
+}
+.entry-title a:hover{
+    color:#2563eb;
+}
+article{
+    margin-bottom:3em;
+}
+.entry-content{
+    margin-top:1em;
+}
+@media (prefers-color-scheme:dark){
+    body{
+        background:#0f172a;
+        color:#e5e7eb;
+    }
+    .entry-title a{
+        color:#e5e7eb;
+    }
+}
+</style>
 
 <main id="main" class="site-main">
     <?php
