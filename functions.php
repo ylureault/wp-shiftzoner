@@ -525,44 +525,65 @@ function shiftzoner_map_shortcode() {
     ?>
     <div class="shiftzoner-map-container">
         <div id="shiftzoner-map" style="height: 600px; width: 100%;"></div>
+        <div id="shiftzoner-map-error" style="display:none; padding:20px; text-align:center; color:#991b1b; background:#fef2f2; border:1px solid #fecaca; border-radius:8px;">
+            <strong>Erreur de chargement</strong><br>
+            La bibliothèque Leaflet n'est pas disponible. Veuillez réessayer plus tard.
+        </div>
         <div class="map-filters">
             <?php echo shiftzoner_get_filter_form(); ?>
         </div>
     </div>
-    
+
     <script>
     jQuery(document).ready(function($) {
-        // Initialiser la carte Leaflet
-        var map = L.map('shiftzoner-map').setView([48.8566, 2.3522], 6);
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-        
-        // Charger les points GPS
-        $.ajax({
-            url: '<?php echo admin_url('admin-ajax.php'); ?>',
-            type: 'POST',
-            data: {
-                action: 'shiftzoner_get_map_points',
-                nonce: '<?php echo wp_create_nonce('shiftzoner_map_nonce'); ?>'
-            },
-            success: function(response) {
-                if (response.success) {
-                    response.data.forEach(function(point) {
-                        var marker = L.marker([point.lat, point.lng]).addTo(map);
-                        marker.bindPopup(`
-                            <div class="map-popup">
-                                <img src="${point.thumbnail}" alt="${point.title}" />
-                                <h4>${point.title}</h4>
-                                <p>${point.brand} ${point.model} (${point.year})</p>
-                                <a href="${point.url}">Voir la photo</a>
-                            </div>
-                        `);
-                    });
+        // Vérifier que Leaflet est chargé
+        if (typeof L === 'undefined') {
+            console.error('Leaflet n\'est pas chargé');
+            $('#shiftzoner-map').hide();
+            $('#shiftzoner-map-error').show();
+            return;
+        }
+
+        try {
+            // Initialiser la carte Leaflet
+            var map = L.map('shiftzoner-map').setView([48.8566, 2.3522], 6);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            // Charger les points GPS
+            $.ajax({
+                url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                type: 'POST',
+                data: {
+                    action: 'shiftzoner_get_map_points',
+                    nonce: '<?php echo wp_create_nonce('shiftzoner_map_nonce'); ?>'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        response.data.forEach(function(point) {
+                            var marker = L.marker([point.lat, point.lng]).addTo(map);
+                            marker.bindPopup(`
+                                <div class="map-popup">
+                                    <img src="${point.thumbnail}" alt="${point.title}" />
+                                    <h4>${point.title}</h4>
+                                    <p>${point.brand} ${point.model} (${point.year})</p>
+                                    <a href="${point.url}">Voir la photo</a>
+                                </div>
+                            `);
+                        });
+                    }
+                },
+                error: function() {
+                    console.error('Erreur lors du chargement des points de la carte');
                 }
-            }
-        });
+            });
+        } catch (error) {
+            console.error('Erreur lors de l\'initialisation de la carte:', error);
+            $('#shiftzoner-map').hide();
+            $('#shiftzoner-map-error').show();
+        }
     });
     </script>
     <?php
@@ -798,26 +819,24 @@ function shiftzoner_get_filter_form() {
 add_action('wp_enqueue_scripts', 'shiftzoner_enqueue_assets');
 
 function shiftzoner_enqueue_assets() {
-    // Leaflet pour la carte
-    wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
-    wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], null, true);
-    
+    // Leaflet pour la carte (avec intégrité et crossorigin pour sécurité)
+    wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
+    wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
+
     // jQuery
     wp_enqueue_script('jquery');
-    
-    // Script personnalisé
-    wp_enqueue_script('shiftzoner-main', get_template_directory_uri() . '/js/shiftzoner.js', ['jquery'], '1.0', true);
-    
-    // Localiser le script
-   // dans shiftzoner_enqueue_assets(), complète la localisation existante :
-wp_localize_script('shiftzoner-main', 'shiftzoner', [
-    'ajax_url'      => admin_url('admin-ajax.php'),
-    'vote_nonce'    => wp_create_nonce('shiftzoner_vote_nonce'),
-    'map_nonce'     => wp_create_nonce('shiftzoner_map_nonce'),
-    'filters_nonce' => wp_create_nonce('shiftzoner_filters_nonce'), // ← ajouté
-]);
 
-    
+    // Script personnalisé (dépend de jQuery et Leaflet)
+    wp_enqueue_script('shiftzoner-main', get_template_directory_uri() . '/js/shiftzoner.js', ['jquery', 'leaflet'], '1.0', true);
+
+    // Localiser le script
+    wp_localize_script('shiftzoner-main', 'shiftzoner', [
+        'ajax_url'      => admin_url('admin-ajax.php'),
+        'vote_nonce'    => wp_create_nonce('shiftzoner_vote_nonce'),
+        'map_nonce'     => wp_create_nonce('shiftzoner_map_nonce'),
+        'filters_nonce' => wp_create_nonce('shiftzoner_filters_nonce'),
+    ]);
+
     // Styles personnalisés
     wp_enqueue_style('shiftzoner-main', get_template_directory_uri() . '/css/shiftzoner.css', [], '1.0');
 }

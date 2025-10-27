@@ -294,7 +294,13 @@ get_header();
 }
 .szr-wrap{max-width:1200px;margin:0 auto;padding:20px}
 
-/* barre filtres (visible uniquement à l’accueil) */
+/* description de la marque */
+.szr-brand-desc{margin:10px 0;color:var(--text);line-height:1.6;font-size:15px}
+.szr-brand-desc p{margin:6px 0}
+.szr-head{display:flex;gap:16px;align-items:flex-start;margin-bottom:20px}
+.szr-head .szr-logo{flex-shrink:0}
+
+/* barre filtres (visible uniquement à l'accueil) */
 .szr-toolbar{position:sticky;top:0;z-index:20;background:var(--bg);backdrop-filter: blur(10px);border-bottom:1px solid rgba(100,116,139,.12)}
 .szr-tool-head{display:flex;align-items:center;justify-content:space-between;padding:12px 4px}
 .szr-title{font-size:clamp(24px,2.4vw,36px);font-weight:900;margin:0;color:var(--text);letter-spacing:-.01em}
@@ -440,7 +446,12 @@ get_header();
     <?php if ($brand_logo): ?><img src="<?php echo esc_url($brand_logo); ?>" class="szr-logo" alt="" /><?php endif; ?>
     <div>
       <h2 class="szr-title"><?php echo esc_html($brand_term->name); ?></h2>
-      <p class="szr-sub">choisis un modèle de la marque. uniquement les modèles reliés s’affichent.</p>
+      <?php
+        $brand_description = term_description($brand_term->term_id, $TAX_BRAND);
+        if ($brand_description): ?>
+          <div class="szr-brand-desc"><?php echo wp_kses_post($brand_description); ?></div>
+      <?php endif; ?>
+      <p class="szr-sub">choisis un modèle de la marque. uniquement les modèles reliés s'affichent.</p>
     </div>
   </div>
 
@@ -482,6 +493,22 @@ get_header();
         <?php echo esc_html($brand_term ? $brand_term->name : ''); ?>
         <?php if ($model_term): ?> — <?php echo esc_html($model_term->name); ?><?php endif; ?>
       </h2>
+      <?php
+        // Afficher la description de la marque si disponible
+        if ($brand_term && !is_wp_error($brand_term)) {
+          $brand_description = term_description($brand_term->term_id, $TAX_BRAND);
+          if ($brand_description): ?>
+            <div class="szr-brand-desc"><?php echo wp_kses_post($brand_description); ?></div>
+          <?php endif;
+        }
+        // Afficher la description du modèle si disponible
+        if ($model_term && !is_wp_error($model_term)) {
+          $model_description = term_description($model_term->term_id, $TAX_MODEL);
+          if ($model_description): ?>
+            <div class="szr-brand-desc"><?php echo wp_kses_post($model_description); ?></div>
+          <?php endif;
+        }
+      ?>
       <p class="szr-sub">dernières photos du modèle. ajoute la tienne juste en dessous.</p>
     </div>
   </div>
