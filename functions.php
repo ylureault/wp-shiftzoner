@@ -55,21 +55,22 @@ function shiftzoner_register_post_types() {
 }
 add_action( 'init', 'shiftzoner_register_post_types' );
 
-// 5. SYSTÈME DE VOTES
+// 5. SYSTÈME DE VOTES AVEC BUDDYPRESS
 add_action( 'wp_ajax_szr_vote', 'shiftzoner_handle_vote' );
 add_action( 'wp_ajax_nopriv_szr_vote', 'shiftzoner_handle_vote' );
 function shiftzoner_handle_vote() {
     check_ajax_referer( 'shiftzoner_nonce', 'nonce' );
     if ( ! is_user_logged_in() ) wp_send_json_error( array( 'message' => 'Connexion requise' ) );
-    
+
     $post_id = intval( $_POST['post_id'] ?? 0 );
     $vote_type = sanitize_text_field( $_POST['vote'] ?? '' );
     $user_id = get_current_user_id();
-    
+
     if ( ! $post_id || ! in_array( $vote_type, array( 'up', 'down' ) ) ) wp_send_json_error( array( 'message' => 'Données invalides' ) );
-    
+
     $user_votes = get_post_meta( $post_id, '_szr_user_votes', true ) ?: array();
-    
+
+    // Si l'utilisateur avait déjà voté, on retire son vote
     if ( isset( $user_votes[ $user_id ] ) ) {
         $old_vote = $user_votes[ $user_id ];
         unset( $user_votes[ $user_id ] );
@@ -79,18 +80,41 @@ function shiftzoner_handle_vote() {
         update_post_meta( $post_id, '_szr_vote_score', $new_score );
         wp_send_json_success( array( 'score' => $new_score, 'user_vote' => null ) );
     }
-    
+
+    // Nouveau vote
     $user_votes[ $user_id ] = $vote_type;
     update_post_meta( $post_id, '_szr_user_votes', $user_votes );
     $current_score = (int) get_post_meta( $post_id, '_szr_vote_score', true );
     $new_score = $vote_type === 'up' ? $current_score + 1 : $current_score - 1;
     update_post_meta( $post_id, '_szr_vote_score', $new_score );
-    
+
+    // Mise à jour du karma de l'auteur
     $author_id = get_post_field( 'post_author', $post_id );
     $karma = (int) get_user_meta( $author_id, '_szr_karma', true );
     $new_karma = $vote_type === 'up' ? $karma + 1 : $karma - 1;
     update_user_meta( $author_id, '_szr_karma', $new_karma );
-    
+
+    // Activité BuddyPress pour les likes (upvotes uniquement)
+    if ( $vote_type === 'up' && function_exists( 'bp_activity_add' ) ) {
+        $photo_title = get_the_title( $post_id );
+        $photo_url = get_permalink( $post_id );
+        $author_name = get_the_author_meta( 'display_name', $author_id );
+
+        bp_activity_add( array(
+            'user_id' => $user_id,
+            'action' => sprintf(
+                '%s a aimé la photo <a href="%s">%s</a> de %s',
+                bp_core_get_userlink( $user_id ),
+                esc_url( $photo_url ),
+                esc_html( $photo_title ),
+                bp_core_get_userlink( $author_id )
+            ),
+            'component' => 'activity',
+            'type' => 'activity_update',
+            'item_id' => $post_id,
+        ) );
+    }
+
     wp_send_json_success( array( 'score' => $new_score, 'user_vote' => $vote_type, 'karma' => $new_karma ) );
 }
 
@@ -2031,135 +2055,247 @@ function shiftzoner_get_rss_feed() {
     return $items;
 }
 
-// Shortcode pour afficher le bandeau RSS
+// Shortcode pour afficher le bandeau RSS (version discrète en bas)
 add_shortcode('shiftzoner_news_ticker', 'shiftzoner_news_ticker_shortcode');
 function shiftzoner_news_ticker_shortcode() {
     $items = shiftzoner_get_rss_feed();
-    
+
     if (empty($items)) {
         return '';
     }
-    
+
     ob_start();
     ?>
-    <div class="shiftzoner-news-ticker">
-        <div class="news-ticker-label">
-            <span class="ticker-icon">📰</span>
-            <span class="ticker-text">ACTUS</span>
-        </div>
+    <div class="shiftzoner-news-ticker-bottom">
         <div class="news-ticker-content">
             <div class="news-ticker-wrapper">
-                <?php foreach ($items as $item): ?>
-                    <div class="news-item">
+                <?php foreach ($items as $item):
+                    // Nettoyer le titre: enlever HTML et entités
+                    $clean_title = strip_tags($item['title']);
+                    $clean_title = html_entity_decode($clean_title, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                ?>
+                    <a href="<?php echo esc_url($item['link']); ?>" target="_blank" rel="noopener" class="news-item">
                         <span class="news-bullet">•</span>
-                        <a href="<?php echo esc_url($item['link']); ?>" target="_blank" rel="noopener">
-                            <?php echo esc_html($item['title']); ?>
-                        </a>
-                    </div>
+                        <span><?php echo esc_html($clean_title); ?></span>
+                    </a>
                 <?php endforeach; ?>
                 <!-- Dupliquer pour un défilement infini -->
-                <?php foreach ($items as $item): ?>
-                    <div class="news-item">
+                <?php foreach ($items as $item):
+                    $clean_title = strip_tags($item['title']);
+                    $clean_title = html_entity_decode($clean_title, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                ?>
+                    <a href="<?php echo esc_url($item['link']); ?>" target="_blank" rel="noopener" class="news-item">
                         <span class="news-bullet">•</span>
-                        <a href="<?php echo esc_url($item['link']); ?>" target="_blank" rel="noopener">
-                            <?php echo esc_html($item['title']); ?>
-                        </a>
-                    </div>
+                        <span><?php echo esc_html($clean_title); ?></span>
+                    </a>
                 <?php endforeach; ?>
             </div>
         </div>
     </div>
-    
+
     <style>
-    .shiftzoner-news-ticker {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        border-bottom: 2px solid #ff0055;
-        display: flex;
-        align-items: center;
+    .shiftzoner-news-ticker-bottom {
+        background: rgba(10, 10, 10, 0.95);
+        border-top: 1px solid rgba(255, 0, 85, 0.3);
         overflow: hidden;
+        padding: 8px 0;
         position: relative;
-        z-index: 1000;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
     }
-    
-    .news-ticker-label {
-        background: #ff0055;
-        padding: 12px 20px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-shrink: 0;
-        font-weight: bold;
-        color: white;
-    }
-    
-    .ticker-icon {
-        font-size: 1.2rem;
-    }
-    
+
     .news-ticker-content {
-        flex: 1;
         overflow: hidden;
-        padding: 0 20px;
     }
-    
+
     .news-ticker-wrapper {
         display: flex;
         gap: 40px;
-        animation: scroll 40s linear infinite;
+        animation: scroll 60s linear infinite;
         white-space: nowrap;
     }
-    
+
     @keyframes scroll {
         0% { transform: translateX(0); }
         100% { transform: translateX(-50%); }
     }
-    
+
     .news-item {
         display: inline-flex;
         align-items: center;
-        gap: 10px;
-    }
-    
-    .news-bullet {
-        color: #ff0055;
-        font-size: 1.5rem;
-    }
-    
-    .news-item a {
-        color: white;
+        gap: 8px;
+        color: #a0a0a0;
         text-decoration: none;
+        font-size: 13px;
         transition: color 0.3s;
     }
-    
-    .news-item a:hover {
+
+    .news-bullet {
         color: #ff0055;
+        font-size: 1rem;
     }
-    
-    @media (max-width: 768px) {
-        .ticker-text {
-            display: none;
-        }
-        
-        .news-ticker-label {
-            padding: 12px 15px;
-        }
-        
-        .news-ticker-wrapper {
-            animation: scroll 40s linear infinite;
-        }
-        
-        .news-item a {
-            font-size: 0.85rem;
-        }
+
+    .news-item:hover {
+        color: #ffffff;
+    }
+
+    .news-item:hover .news-bullet {
+        color: #ff3377;
     }
     </style>
     <?php
     return ob_get_clean();
 }
 
-// Hook pour ajouter le bandeau après l'ouverture du body
-add_action('wp_body_open', 'shiftzoner_add_news_ticker');
+// Hook pour ajouter le bandeau en bas avant le footer
+add_action('wp_footer', 'shiftzoner_add_news_ticker', 5);
 function shiftzoner_add_news_ticker() {
     echo do_shortcode('[shiftzoner_news_ticker]');
+}
+
+/**
+ * ===============================================
+ * JAVASCRIPT POUR LES VOTES
+ * ===============================================
+ */
+add_action('wp_footer', 'shiftzoner_vote_javascript', 20);
+function shiftzoner_vote_javascript() {
+    if (!is_singular('car_photo') && !is_post_type_archive('car_photo') && !is_front_page()) {
+        return;
+    }
+    ?>
+    <script>
+    (function() {
+        'use strict';
+
+        // Gestion des votes
+        document.addEventListener('DOMContentLoaded', function() {
+            const voteButtons = document.querySelectorAll('.vote-btn');
+
+            voteButtons.forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+
+                    if (!button.dataset.postId || !button.dataset.vote) {
+                        console.error('Missing data attributes');
+                        return;
+                    }
+
+                    const postId = button.dataset.postId;
+                    const voteType = button.dataset.vote;
+                    const voteContainer = button.closest('.photo-votes');
+                    const countElement = voteContainer.querySelector('.vote-count');
+
+                    // Désactiver temporairement les boutons
+                    voteButtons.forEach(btn => btn.disabled = true);
+
+                    // Envoyer la requête AJAX
+                    fetch('<?php echo admin_url('admin-ajax.php'); ?>', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: new URLSearchParams({
+                            action: 'szr_vote',
+                            post_id: postId,
+                            vote: voteType,
+                            nonce: '<?php echo wp_create_nonce('shiftzoner_nonce'); ?>'
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Mettre à jour le compteur
+                            countElement.textContent = data.data.score;
+
+                            // Mise à jour visuelle
+                            voteContainer.querySelectorAll('.vote-btn').forEach(btn => {
+                                btn.classList.remove('active');
+                            });
+
+                            if (data.data.user_vote) {
+                                button.classList.add('active');
+                            }
+
+                            // Animation
+                            countElement.classList.add('vote-animate');
+                            setTimeout(() => countElement.classList.remove('vote-animate'), 300);
+                        } else {
+                            alert(data.data.message || 'Erreur lors du vote');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erreur:', error);
+                        alert('Une erreur est survenue');
+                    })
+                    .finally(() => {
+                        // Réactiver les boutons
+                        voteButtons.forEach(btn => btn.disabled = false);
+                    });
+                });
+            });
+        });
+    })();
+    </script>
+
+    <style>
+    .vote-btn {
+        background: transparent;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        color: #a0a0a0;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .vote-btn:hover {
+        border-color: #ff0055;
+        color: #ff0055;
+        transform: scale(1.1);
+    }
+
+    .vote-btn.active {
+        border-color: #ff0055;
+        background: rgba(255, 0, 85, 0.1);
+        color: #ff0055;
+    }
+
+    .vote-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .vote-count {
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #ffffff;
+        margin: 10px 0;
+        display: block;
+        text-align: center;
+    }
+
+    .vote-animate {
+        animation: voteScale 0.3s ease;
+    }
+
+    @keyframes voteScale {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.3); }
+        100% { transform: scale(1); }
+    }
+
+    .photo-votes {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.5);
+        border-radius: 12px;
+        margin-top: 20px;
+    }
+    </style>
+    <?php
 }
