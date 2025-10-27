@@ -530,12 +530,49 @@ function process_model_data( $model ) {
         wp_reset_postdata();
     }
 
+    // Get model description
+    $description = term_description( $model->term_id, 'car_model' );
+    $description = $description ? wp_strip_all_tags( $description ) : '';
+
+    // Get groups associated with this model
+    $groups_query = new WP_Query( array(
+        'post_type'      => 'car_group',
+        'posts_per_page' => -1,
+        'post_status'    => 'publish',
+        'meta_query'     => array(
+            array(
+                'key'     => '_szr_group_model_id',
+                'value'   => $model->term_id,
+                'compare' => '='
+            ),
+        ),
+    ) );
+
+    $groups = array();
+    if ( $groups_query->have_posts() ) {
+        while ( $groups_query->have_posts() ) {
+            $groups_query->the_post();
+            $group_id = get_the_ID();
+            $members = get_post_meta( $group_id, '_szr_group_members', true ) ?: array();
+
+            $groups[] = array(
+                'id'           => $group_id,
+                'name'         => get_the_title(),
+                'url'          => get_permalink(),
+                'member_count' => count( $members ),
+            );
+        }
+        wp_reset_postdata();
+    }
+
     return array(
-        'id'        => $model->term_id,
-        'name'      => $model->name,
-        'slug'      => $model->slug,
-        'count'     => $model->count,
-        'thumbnail' => $thumbnail,
+        'id'          => $model->term_id,
+        'name'        => $model->name,
+        'slug'        => $model->slug,
+        'count'       => $model->count,
+        'thumbnail'   => $thumbnail,
+        'description' => $description,
+        'groups'      => $groups,
     );
 }
 
