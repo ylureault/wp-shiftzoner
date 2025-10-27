@@ -343,37 +343,74 @@ add_action('wp_ajax_nopriv_shiftzoner_vote', 'shiftzoner_handle_vote');
 
 function shiftzoner_handle_vote() {
     check_ajax_referer('shiftzoner_vote_nonce', 'nonce');
-    
+
     if (!is_user_logged_in()) {
         wp_send_json_error('Vous devez être connecté pour voter');
     }
-    
+
     $post_id = intval($_POST['post_id']);
     $vote_type = sanitize_text_field($_POST['vote_type']); // 'up' ou 'down'
     $user_id = get_current_user_id();
-    
+
     // Vérifier si l'utilisateur a déjà voté
     $user_votes = get_post_meta($post_id, '_shiftzoner_user_votes', true) ?: [];
-    
+
     if (isset($user_votes[$user_id])) {
         wp_send_json_error('Vous avez déjà voté pour cette photo');
     }
-    
+
     // Enregistrer le vote
     $current_votes = get_post_meta($post_id, '_shiftzoner_votes', true) ?: 0;
     $new_votes = $vote_type === 'up' ? $current_votes + 1 : $current_votes - 1;
-    
+
     update_post_meta($post_id, '_shiftzoner_votes', $new_votes);
-    
+
     $user_votes[$user_id] = $vote_type;
     update_post_meta($post_id, '_shiftzoner_user_votes', $user_votes);
-    
+
     // Mettre à jour le karma de l'auteur
     $author_id = get_post_field('post_author', $post_id);
     $author_karma = get_user_meta($author_id, 'shiftzoner_karma', true) ?: 0;
     $new_karma = $vote_type === 'up' ? $author_karma + 1 : $author_karma - 1;
     update_user_meta($author_id, 'shiftzoner_karma', $new_karma);
-    
+
+    // === INTÉGRATION BUDDYPRESS ===
+    if (function_exists('bp_activity_add')) {
+        $photo_title = get_the_title($post_id);
+        $photo_url = get_permalink($post_id);
+        $photo_thumb = get_the_post_thumbnail_url($post_id, 'thumbnail');
+
+        // Activité : l'utilisateur a aimé une photo
+        bp_activity_add(array(
+            'user_id' => $user_id,
+            'action' => sprintf(
+                '%s a aimé la photo <a href="%s">%s</a>',
+                bp_core_get_userlink($user_id),
+                $photo_url,
+                $photo_title
+            ),
+            'component' => 'activity',
+            'type' => 'activity_update',
+            'primary_link' => $photo_url,
+            'item_id' => $post_id,
+            'secondary_item_id' => $user_id,
+            'hide_sitewide' => false
+        ));
+
+        // Notification pour l'auteur
+        if (function_exists('bp_notifications_add_notification') && $author_id !== $user_id) {
+            bp_notifications_add_notification(array(
+                'user_id' => $author_id,
+                'item_id' => $post_id,
+                'secondary_item_id' => $user_id,
+                'component_name' => 'shiftzoner',
+                'component_action' => 'photo_liked',
+                'date_notified' => bp_core_current_time(),
+                'is_new' => 1
+            ));
+        }
+    }
+
     wp_send_json_success(['votes' => $new_votes, 'karma' => $new_karma]);
 }
 
@@ -1958,3 +1995,449 @@ function fix_upload_permissions() {
 }
 add_action('admin_init', 'fix_upload_permissions');
 add_action('wp_loaded', 'fix_upload_permissions');
+/**
+ * ===============================================
+ * INSCRIPTION & AUTHENTIFICATION
+ * ===============================================
+ */
+
+// AJAX : Inscription utilisateur
+add_action('wp_ajax_nopriv_shiftzoner_register', 'shiftzoner_handle_registration');
+function shiftzoner_handle_registration() {
+    // Vérification nonce
+    if (!isset($_POST['signup_nonce']) || !wp_verify_nonce($_POST['signup_nonce'], 'shiftzoner_signup')) {
+        wp_send_json_error('Vérification de sécurité échouée');
+    }
+
+    $username = sanitize_user($_POST['username']);
+    $email = sanitize_email($_POST['email']);
+    $password = $_POST['password'];
+
+    // Validation
+    if (empty($username) || empty($email) || empty($password)) {
+        wp_send_json_error('Tous les champs sont requis');
+    }
+
+    if (username_exists($username)) {
+        wp_send_json_error('Ce nom d\'utilisateur est déjà pris');
+    }
+
+    if (email_exists($email)) {
+        wp_send_json_error('Cet email est déjà utilisé');
+    }
+
+    if (strlen($password) < 8) {
+        wp_send_json_error('Le mot de passe doit contenir au moins 8 caractères');
+    }
+
+    // Créer l'utilisateur
+    $user_id = wp_create_user($username, $password, $email);
+
+    if (is_wp_error($user_id)) {
+        wp_send_json_error($user_id->get_error_message());
+    }
+
+    // Mettre à jour les métadonnées
+    update_user_meta($user_id, 'shiftzoner_karma', 0);
+    update_user_meta($user_id, 'shiftzoner_user_color', '#' . substr(md5($username), 0, 6));
+
+    // Connecter l'utilisateur
+    wp_set_current_user($user_id);
+    wp_set_auth_cookie($user_id);
+
+    // === INTÉGRATION BUDDYPRESS ===
+    if (function_exists('bp_activity_add')) {
+        // Activité : nouvel utilisateur rejoint la communauté
+        bp_activity_add(array(
+            'user_id' => $user_id,
+            'action' => sprintf(
+                '%s a rejoint la communauté ShiftZoneR !',
+                bp_core_get_userlink($user_id)
+            ),
+            'component' => 'activity',
+            'type' => 'new_member',
+            'hide_sitewide' => false
+        ));
+    }
+
+    // Attribution du badge "Nouveau membre"
+    shiftzoner_award_badge($user_id, 'new_member');
+
+    wp_send_json_success(array(
+        'message' => 'Inscription réussie !',
+        'redirect' => home_url('/mon-compte')
+    ));
+}
+
+/**
+ * ===============================================
+ * INTÉGRATION BUDDYPRESS - ACTIVITÉS
+ * ===============================================
+ */
+
+// Activité lors de la publication d'une nouvelle photo
+add_action('publish_car_photo', 'shiftzoner_bp_new_photo_activity', 10, 2);
+function shiftzoner_bp_new_photo_activity($post_id, $post) {
+    if (!function_exists('bp_activity_add')) {
+        return;
+    }
+
+    $user_id = $post->post_author;
+    $photo_title = get_the_title($post_id);
+    $photo_url = get_permalink($post_id);
+    $photo_thumb = get_the_post_thumbnail_url($post_id, 'thumbnail');
+
+    // Récupérer marque et modèle
+    $brand = wp_get_post_terms($post_id, 'car_brand', array('fields' => 'names'));
+    $model = wp_get_post_terms($post_id, 'car_model', array('fields' => 'names'));
+    
+    $car_info = '';
+    if (!empty($brand) && !empty($model)) {
+        $car_info = ' - ' . $brand[0] . ' ' . $model[0];
+    }
+
+    bp_activity_add(array(
+        'user_id' => $user_id,
+        'action' => sprintf(
+            '%s a publié une nouvelle photo%s',
+            bp_core_get_userlink($user_id),
+            $car_info
+        ),
+        'content' => sprintf(
+            '<a href="%s"><img src="%s" alt="%s" style="max-width:100%%; height:auto; border-radius:12px;"></a><p><a href="%s">%s</a></p>',
+            $photo_url,
+            $photo_thumb,
+            $photo_title,
+            $photo_url,
+            $photo_title
+        ),
+        'component' => 'activity',
+        'type' => 'new_car_photo',
+        'primary_link' => $photo_url,
+        'item_id' => $post_id,
+        'secondary_item_id' => $user_id,
+        'hide_sitewide' => false
+    ));
+
+    // Vérifier les badges
+    shiftzoner_check_photo_badges($user_id);
+}
+
+// Activité lors d'un nouveau commentaire
+add_action('comment_post', 'shiftzoner_bp_new_comment_activity', 10, 3);
+function shiftzoner_bp_new_comment_activity($comment_id, $approved, $commentdata) {
+    if (!function_exists('bp_activity_add') || $approved !== 1) {
+        return;
+    }
+
+    $comment = get_comment($comment_id);
+    $post = get_post($comment->comment_post_ID);
+
+    if ($post->post_type !== 'car_photo') {
+        return;
+    }
+
+    $photo_url = get_permalink($post->ID);
+    $photo_title = get_the_title($post->ID);
+
+    bp_activity_add(array(
+        'user_id' => $comment->user_id,
+        'action' => sprintf(
+            '%s a commenté la photo <a href="%s">%s</a>',
+            bp_core_get_userlink($comment->user_id),
+            $photo_url,
+            $photo_title
+        ),
+        'content' => wp_trim_words($comment->comment_content, 20),
+        'component' => 'activity',
+        'type' => 'new_comment',
+        'primary_link' => $photo_url . '#comment-' . $comment_id,
+        'item_id' => $post->ID,
+        'secondary_item_id' => $comment_id,
+        'hide_sitewide' => false
+    ));
+
+    // Notification pour l'auteur de la photo
+    if ($comment->user_id != $post->post_author) {
+        if (function_exists('bp_notifications_add_notification')) {
+            bp_notifications_add_notification(array(
+                'user_id' => $post->post_author,
+                'item_id' => $post->ID,
+                'secondary_item_id' => $comment->user_id,
+                'component_name' => 'shiftzoner',
+                'component_action' => 'new_comment',
+                'date_notified' => bp_core_current_time(),
+                'is_new' => 1
+            ));
+        }
+    }
+}
+
+/**
+ * ===============================================
+ * SYSTÈME DE BADGES ET GAMIFICATION
+ * ===============================================
+ */
+
+// Définir les badges disponibles
+function shiftzoner_get_badges() {
+    return array(
+        'new_member' => array(
+            'name' => 'Nouveau Membre',
+            'icon' => '🎉',
+            'description' => 'Bienvenue dans la communauté !',
+            'color' => '#3b82f6'
+        ),
+        'first_photo' => array(
+            'name' => 'Première Photo',
+            'icon' => '📸',
+            'description' => 'A publié sa première photo',
+            'color' => '#10b981'
+        ),
+        'photo_lover' => array(
+            'name' => 'Amateur de Photos',
+            'icon' => '📷',
+            'description' => 'A publié 10 photos',
+            'color' => '#8b5cf6'
+        ),
+        'photo_master' => array(
+            'name' => 'Maître Photographe',
+            'icon' => '🏆',
+            'description' => 'A publié 50 photos',
+            'color' => '#f59e0b'
+        ),
+        'popular' => array(
+            'name' => 'Populaire',
+            'icon' => '⭐',
+            'description' => 'A reçu 100 likes',
+            'color' => '#ec4899'
+        ),
+        'influencer' => array(
+            'name' => 'Influenceur',
+            'icon' => '🔥',
+            'description' => 'A reçu 500 likes',
+            'color' => '#ef4444'
+        ),
+        'community_hero' => array(
+            'name' => 'Héros de la Communauté',
+            'icon' => '💎',
+            'description' => 'A contribué de manière exceptionnelle',
+            'color' => '#06b6d4'
+        )
+    );
+}
+
+// Attribution d'un badge
+function shiftzoner_award_badge($user_id, $badge_id) {
+    $user_badges = get_user_meta($user_id, 'shiftzoner_badges', true) ?: array();
+    
+    if (in_array($badge_id, $user_badges)) {
+        return false; // Badge déjà attribué
+    }
+
+    $user_badges[] = $badge_id;
+    update_user_meta($user_id, 'shiftzoner_badges', $user_badges);
+
+    // Activité BuddyPress
+    if (function_exists('bp_activity_add')) {
+        $badges = shiftzoner_get_badges();
+        $badge = $badges[$badge_id];
+
+        bp_activity_add(array(
+            'user_id' => $user_id,
+            'action' => sprintf(
+                '%s a débloqué le badge %s <strong>%s</strong> !',
+                bp_core_get_userlink($user_id),
+                $badge['icon'],
+                $badge['name']
+            ),
+            'component' => 'activity',
+            'type' => 'badge_unlocked',
+            'hide_sitewide' => false
+        ));
+    }
+
+    return true;
+}
+
+// Vérifier les badges photos
+function shiftzoner_check_photo_badges($user_id) {
+    $photo_count = count_user_posts($user_id, 'car_photo', true);
+
+    if ($photo_count === 1) {
+        shiftzoner_award_badge($user_id, 'first_photo');
+    } elseif ($photo_count === 10) {
+        shiftzoner_award_badge($user_id, 'photo_lover');
+    } elseif ($photo_count === 50) {
+        shiftzoner_award_badge($user_id, 'photo_master');
+    }
+
+    // Vérifier les likes
+    $total_likes = 0;
+    $user_photos = get_posts(array(
+        'post_type' => 'car_photo',
+        'author' => $user_id,
+        'posts_per_page' => -1,
+        'fields' => 'ids'
+    ));
+
+    foreach ($user_photos as $photo_id) {
+        $votes = get_post_meta($photo_id, '_shiftzoner_votes', true) ?: 0;
+        $total_likes += $votes;
+    }
+
+    if ($total_likes >= 100 && $total_likes < 500) {
+        shiftzoner_award_badge($user_id, 'popular');
+    } elseif ($total_likes >= 500) {
+        shiftzoner_award_badge($user_id, 'influencer');
+    }
+}
+
+// Afficher les badges sur le profil
+function shiftzoner_display_user_badges($user_id) {
+    $user_badges = get_user_meta($user_id, 'shiftzoner_badges', true) ?: array();
+    $all_badges = shiftzoner_get_badges();
+
+    if (empty($user_badges)) {
+        return '<p style="color:#94a3b8;">Aucun badge pour le moment</p>';
+    }
+
+    $html = '<div class="user-badges" style="display:flex;flex-wrap:wrap;gap:8px;">';
+    
+    foreach ($user_badges as $badge_id) {
+        if (!isset($all_badges[$badge_id])) continue;
+        
+        $badge = $all_badges[$badge_id];
+        $html .= sprintf(
+            '<div class="badge" style="background:%s;color:white;padding:6px 12px;border-radius:20px;font-size:13px;display:flex;align-items:center;gap:6px;" title="%s">
+                <span>%s</span><span>%s</span>
+            </div>',
+            $badge['color'],
+            esc_attr($badge['description']),
+            $badge['icon'],
+            esc_html($badge['name'])
+        );
+    }
+    
+    $html .= '</div>';
+    return $html;
+}
+
+
+/**
+ * ===============================================
+ * GESTION DU PROFIL UTILISATEUR
+ * ===============================================
+ */
+
+// AJAX : Mise à jour du profil
+add_action('wp_ajax_shiftzoner_update_profile', 'shiftzoner_handle_profile_update');
+function shiftzoner_handle_profile_update() {
+    if (!is_user_logged_in()) {
+        wp_send_json_error('Vous devez être connecté');
+    }
+
+    check_ajax_referer('update_profile', 'profile_nonce');
+
+    $user_id = get_current_user_id();
+    $display_name = sanitize_text_field($_POST['display_name']);
+    $user_email = sanitize_email($_POST['user_email']);
+    $description = sanitize_textarea_field($_POST['description']);
+
+    // Validation
+    if (empty($display_name) || empty($user_email)) {
+        wp_send_json_error('Tous les champs requis doivent être remplis');
+    }
+
+    if (!is_email($user_email)) {
+        wp_send_json_error('Email invalide');
+    }
+
+    // Vérifier si l'email est déjà utilisé par un autre utilisateur
+    $email_exists = email_exists($user_email);
+    if ($email_exists && $email_exists != $user_id) {
+        wp_send_json_error('Cet email est déjà utilisé');
+    }
+
+    // Mise à jour
+    $updated = wp_update_user(array(
+        'ID' => $user_id,
+        'display_name' => $display_name,
+        'user_email' => $user_email
+    ));
+
+    if (is_wp_error($updated)) {
+        wp_send_json_error($updated->get_error_message());
+    }
+
+    update_user_meta($user_id, 'description', $description);
+
+    wp_send_json_success('Profil mis à jour avec succès !');
+}
+
+// AJAX : Changement de mot de passe
+add_action('wp_ajax_shiftzoner_update_password', 'shiftzoner_handle_password_update');
+function shiftzoner_handle_password_update() {
+    if (!is_user_logged_in()) {
+        wp_send_json_error('Vous devez être connecté');
+    }
+
+    check_ajax_referer('update_password', 'password_nonce');
+
+    $user_id = get_current_user_id();
+    $current_password = $_POST['current_password'];
+    $new_password = $_POST['new_password'];
+
+    // Vérifier le mot de passe actuel
+    $user = get_userdata($user_id);
+    if (!wp_check_password($current_password, $user->user_pass, $user_id)) {
+        wp_send_json_error('Mot de passe actuel incorrect');
+    }
+
+    // Validation nouveau mot de passe
+    if (strlen($new_password) < 8) {
+        wp_send_json_error('Le nouveau mot de passe doit contenir au moins 8 caractères');
+    }
+
+    // Mise à jour
+    wp_set_password($new_password, $user_id);
+
+    // Reconnecter l'utilisateur
+    wp_set_auth_cookie($user_id);
+
+    wp_send_json_success('Mot de passe changé avec succès !');
+}
+
+// AJAX : Upload avatar
+add_action('wp_ajax_shiftzoner_update_avatar', 'shiftzoner_handle_avatar_update');
+function shiftzoner_handle_avatar_update() {
+    if (!is_user_logged_in()) {
+        wp_send_json_error('Vous devez être connecté');
+    }
+
+    check_ajax_referer('update_avatar', 'nonce');
+
+    if (!isset($_FILES['avatar'])) {
+        wp_send_json_error('Aucun fichier envoyé');
+    }
+
+    $user_id = get_current_user_id();
+    
+    require_once(ABSPATH . 'wp-admin/includes/image.php');
+    require_once(ABSPATH . 'wp-admin/includes/file.php');
+    require_once(ABSPATH . 'wp-admin/includes/media.php');
+
+    $attachment_id = media_handle_upload('avatar', 0);
+
+    if (is_wp_error($attachment_id)) {
+        wp_send_json_error($attachment_id->get_error_message());
+    }
+
+    // Sauvegarder l'ID de l'avatar
+    update_user_meta($user_id, 'shiftzoner_avatar', $attachment_id);
+
+    wp_send_json_success(array(
+        'avatar_url' => wp_get_attachment_url($attachment_id)
+    ));
+}
+
