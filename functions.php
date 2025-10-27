@@ -790,7 +790,137 @@ function shiftzoner_increment_views() {
 }
 add_action( 'wp_head', 'shiftzoner_increment_views' );
 
-// 11. BUDDYPRESS
+// 11. SEO - DYNAMIC META TAGS
+function shiftzoner_add_seo_meta() {
+    global $post;
+
+    $site_name = get_bloginfo( 'name' );
+    $description = get_bloginfo( 'description' );
+    $image = get_template_directory_uri() . '/assets/images/og-default.jpg';
+    $url = home_url( $_SERVER['REQUEST_URI'] );
+
+    // Page spécifique
+    if ( is_singular( 'car_photo' ) ) {
+        $title = get_the_title() . ' - Photos automobiles';
+        $description = wp_trim_words( get_the_excerpt(), 30, '...' );
+        if ( has_post_thumbnail() ) {
+            $image = get_the_post_thumbnail_url( $post->ID, 'large' );
+        }
+        $brands = wp_get_post_terms( $post->ID, 'car_brand' );
+        $models = wp_get_post_terms( $post->ID, 'car_model' );
+        if ( ! empty( $brands ) && ! empty( $models ) ) {
+            $description = 'Découvrez cette magnifique photo de ' . $brands[0]->name . ' ' . $models[0]->name . '. ' . $description;
+        }
+    } elseif ( is_page( 'marques-et-modeles' ) || is_page( 'marques' ) ) {
+        $title = 'Toutes les Marques Automobiles - Explorez la Collection';
+        $description = 'Découvrez notre collection complète de marques automobiles. Plus de ' . wp_count_terms( 'car_brand' ) . ' marques et ' . wp_count_terms( 'car_model' ) . ' modèles avec des milliers de photos haute qualité.';
+    } elseif ( is_page( 'galerie' ) || is_page( 'explorer' ) ) {
+        $title = 'Galerie Photos Automobiles - Les Plus Belles Voitures';
+        $description = 'Explorez notre galerie de photos automobiles haute qualité. Des supercars aux classiques, trouvez l\'inspiration pour votre passion automobile.';
+    } elseif ( is_page( 'carte' ) ) {
+        $title = 'Carte Interactive - Lieux de Prise de Vue';
+        $description = 'Découvrez où les photos ont été prises sur notre carte interactive. Explorez les spots automobiles autour du monde.';
+    } elseif ( is_page( 'communaute' ) ) {
+        $title = 'Communauté ShiftZoneR - Passionnés d\'Automobile';
+        $description = 'Rejoignez la communauté ShiftZoneR. Rencontrez des passionnés, partagez vos photos, participez aux événements et challenges.';
+    } elseif ( is_page( 'soumettre-photo' ) ) {
+        $title = 'Publier une Photo - Partagez Votre Passion';
+        $description = 'Partagez vos plus belles photos automobiles avec la communauté ShiftZoneR. Upload facile, reconnaissance EXIF, géolocalisation automatique.';
+    } elseif ( is_tax( 'car_brand' ) ) {
+        $term = get_queried_object();
+        $title = $term->name . ' - Photos et Modèles';
+        $description = 'Découvrez toutes les photos de ' . $term->name . '. ' . $term->count . ' photos disponibles. Explorez les différents modèles et trouvez l\'inspiration.';
+        $logo_id = get_term_meta( $term->term_id, '_szr_brand_logo_id', true );
+        if ( $logo_id ) {
+            $image = wp_get_attachment_image_url( $logo_id, 'large' );
+        }
+    } elseif ( is_tax( 'car_model' ) ) {
+        $term = get_queried_object();
+        $parent = get_term( $term->parent, 'car_model' );
+        $brand_name = $parent ? $parent->name : '';
+        $title = $brand_name . ' ' . $term->name . ' - Photos';
+        $description = 'Découvrez ' . $term->count . ' photos de ' . $brand_name . ' ' . $term->name . '. Images haute qualité, détails techniques, communauté de passionnés.';
+    } elseif ( is_home() || is_front_page() ) {
+        $title = $site_name . ' - ' . $description;
+        $description = 'ShiftZoneR : la plateforme ultime pour les passionnés d\'automobile. Partagez, découvrez et explorez les plus belles voitures du monde.';
+    } elseif ( is_page() ) {
+        $title = get_the_title() . ' - ' . $site_name;
+        if ( has_excerpt() ) {
+            $description = get_the_excerpt();
+        }
+    } else {
+        $title = wp_get_document_title();
+    }
+
+    // Output meta tags
+    echo '<meta name="description" content="' . esc_attr( $description ) . '">' . "\n";
+    echo '<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">' . "\n";
+
+    // Open Graph
+    echo '<meta property="og:type" content="website">' . "\n";
+    echo '<meta property="og:title" content="' . esc_attr( $title ) . '">' . "\n";
+    echo '<meta property="og:description" content="' . esc_attr( $description ) . '">' . "\n";
+    echo '<meta property="og:url" content="' . esc_url( $url ) . '">' . "\n";
+    echo '<meta property="og:site_name" content="' . esc_attr( $site_name ) . '">' . "\n";
+    echo '<meta property="og:image" content="' . esc_url( $image ) . '">' . "\n";
+    echo '<meta property="og:image:width" content="1200">' . "\n";
+    echo '<meta property="og:image:height" content="630">' . "\n";
+
+    // Twitter Card
+    echo '<meta name="twitter:card" content="summary_large_image">' . "\n";
+    echo '<meta name="twitter:title" content="' . esc_attr( $title ) . '">' . "\n";
+    echo '<meta name="twitter:description" content="' . esc_attr( $description ) . '">' . "\n";
+    echo '<meta name="twitter:image" content="' . esc_url( $image ) . '">' . "\n";
+
+    // Article specific (for photos)
+    if ( is_singular( 'car_photo' ) && isset( $post ) ) {
+        echo '<meta property="article:published_time" content="' . get_the_date( 'c', $post->ID ) . '">' . "\n";
+        echo '<meta property="article:modified_time" content="' . get_the_modified_date( 'c', $post->ID ) . '">' . "\n";
+        echo '<meta property="article:author" content="' . esc_attr( get_the_author_meta( 'display_name', $post->post_author ) ) . '">' . "\n";
+
+        $tags = wp_get_post_terms( $post->ID, 'photo_tag' );
+        foreach ( $tags as $tag ) {
+            echo '<meta property="article:tag" content="' . esc_attr( $tag->name ) . '">' . "\n";
+        }
+    }
+
+    // Schema.org JSON-LD
+    if ( is_singular( 'car_photo' ) ) {
+        $brands = wp_get_post_terms( $post->ID, 'car_brand' );
+        $models = wp_get_post_terms( $post->ID, 'car_model' );
+        $brand_name = ! empty( $brands ) ? $brands[0]->name : '';
+        $model_name = ! empty( $models ) ? $models[0]->name : '';
+
+        $schema = array(
+            '@context' => 'https://schema.org',
+            '@type' => 'ImageObject',
+            'name' => get_the_title(),
+            'description' => $description,
+            'contentUrl' => $image,
+            'uploadDate' => get_the_date( 'c' ),
+            'author' => array(
+                '@type' => 'Person',
+                'name' => get_the_author_meta( 'display_name', $post->post_author ),
+            ),
+        );
+
+        if ( $brand_name && $model_name ) {
+            $schema['about'] = array(
+                '@type' => 'Car',
+                'brand' => array(
+                    '@type' => 'Brand',
+                    'name' => $brand_name,
+                ),
+                'model' => $model_name,
+            );
+        }
+
+        echo '<script type="application/ld+json">' . wp_json_encode( $schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . '</script>' . "\n";
+    }
+}
+add_action( 'wp_head', 'shiftzoner_add_seo_meta', 1 );
+
+// 12. BUDDYPRESS
 add_filter( 'login_redirect', 'shiftzoner_login_redirect', 10, 3 );
 function shiftzoner_login_redirect( $redirect_to, $request, $user ) {
     if ( isset( $user->ID ) && function_exists( 'bp_core_get_user_domain' ) ) return bp_core_get_user_domain( $user->ID );
