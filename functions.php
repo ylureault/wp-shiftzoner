@@ -2441,3 +2441,232 @@ function shiftzoner_handle_avatar_update() {
     ));
 }
 
+
+/**
+ * ===============================================
+ * BANDEAU RSS ACTUALITÉS
+ * ===============================================
+ */
+
+// Fonction pour récupérer le flux RSS
+function shiftzoner_get_rss_feed() {
+    $rss_url = 'https://www.google.fr/alerts/feeds/16799089959260458049/2654113824933158279';
+    
+    // Cache de 30 minutes
+    $cache_key = 'shiftzoner_rss_feed';
+    $cached = get_transient($cache_key);
+    
+    if ($cached !== false) {
+        return $cached;
+    }
+    
+    // Récupérer le flux
+    $rss = fetch_feed($rss_url);
+    
+    if (is_wp_error($rss)) {
+        return array();
+    }
+    
+    $maxitems = $rss->get_item_quantity(20);
+    $rss_items = $rss->get_items(0, $maxitems);
+    
+    $items = array();
+    
+    if ($rss_items) {
+        foreach ($rss_items as $item) {
+            $items[] = array(
+                'title' => $item->get_title(),
+                'link' => $item->get_permalink(),
+                'date' => $item->get_date('U'),
+                'description' => wp_trim_words($item->get_description(), 20, '...')
+            );
+        }
+    }
+    
+    // Mettre en cache pour 30 minutes
+    set_transient($cache_key, $items, 30 * MINUTE_IN_SECONDS);
+    
+    return $items;
+}
+
+// Shortcode pour afficher le bandeau RSS
+add_shortcode('shiftzoner_news_ticker', 'shiftzoner_news_ticker_shortcode');
+function shiftzoner_news_ticker_shortcode() {
+    $items = shiftzoner_get_rss_feed();
+    
+    if (empty($items)) {
+        return '';
+    }
+    
+    ob_start();
+    ?>
+    <div class="shiftzoner-news-ticker">
+        <div class="news-ticker-label">
+            <span class="ticker-icon">📰</span>
+            <span class="ticker-text">ACTUS</span>
+        </div>
+        <div class="news-ticker-content">
+            <div class="news-ticker-wrapper">
+                <?php foreach ($items as $item): ?>
+                    <div class="news-item">
+                        <span class="news-bullet">•</span>
+                        <a href="<?php echo esc_url($item['link']); ?>" target="_blank" rel="noopener">
+                            <?php echo esc_html($item['title']); ?>
+                        </a>
+                    </div>
+                <?php endforeach; ?>
+                <!-- Dupliquer pour un défilement infini -->
+                <?php foreach ($items as $item): ?>
+                    <div class="news-item">
+                        <span class="news-bullet">•</span>
+                        <a href="<?php echo esc_url($item['link']); ?>" target="_blank" rel="noopener">
+                            <?php echo esc_html($item['title']); ?>
+                        </a>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+    
+    <style>
+    .shiftzoner-news-ticker {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        border-bottom: 2px solid #ff0055;
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        position: relative;
+        z-index: 1000;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+    
+    .news-ticker-label {
+        background: linear-gradient(135deg, #ff0055, #e91e63);
+        padding: 12px 24px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+        font-weight: 900;
+        color: white;
+        box-shadow: 4px 0 10px rgba(255, 0, 85, 0.3);
+        z-index: 2;
+    }
+    
+    .ticker-icon {
+        font-size: 1.2rem;
+        animation: pulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+    }
+    
+    .ticker-text {
+        font-size: 0.875rem;
+        letter-spacing: 0.05em;
+    }
+    
+    .news-ticker-content {
+        flex: 1;
+        overflow: hidden;
+        padding: 0 20px;
+        position: relative;
+    }
+    
+    .news-ticker-content::before,
+    .news-ticker-content::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 50px;
+        z-index: 1;
+        pointer-events: none;
+    }
+    
+    .news-ticker-content::before {
+        left: 0;
+        background: linear-gradient(90deg, #1e293b 0%, transparent 100%);
+    }
+    
+    .news-ticker-content::after {
+        right: 0;
+        background: linear-gradient(90deg, transparent 0%, #0f172a 100%);
+    }
+    
+    .news-ticker-wrapper {
+        display: flex;
+        gap: 3rem;
+        animation: scroll 60s linear infinite;
+        will-change: transform;
+    }
+    
+    .news-ticker-wrapper:hover {
+        animation-play-state: paused;
+    }
+    
+    @keyframes scroll {
+        0% {
+            transform: translateX(0);
+        }
+        100% {
+            transform: translateX(-50%);
+        }
+    }
+    
+    .news-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    
+    .news-bullet {
+        color: #ff0055;
+        font-size: 1.2rem;
+    }
+    
+    .news-item a {
+        color: #f8fafc;
+        text-decoration: none;
+        font-size: 0.95rem;
+        font-weight: 500;
+        transition: color 0.3s ease;
+    }
+    
+    .news-item a:hover {
+        color: #00d4ff;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+        .news-ticker-label {
+            padding: 10px 16px;
+        }
+        
+        .ticker-text {
+            display: none;
+        }
+        
+        .news-ticker-wrapper {
+            animation: scroll 40s linear infinite;
+        }
+        
+        .news-item a {
+            font-size: 0.85rem;
+        }
+    }
+    </style>
+    <?php
+    return ob_get_clean();
+}
+
+// Hook pour ajouter le bandeau après l'ouverture du body
+add_action('wp_body_open', 'shiftzoner_add_news_ticker');
+function shiftzoner_add_news_ticker() {
+    echo do_shortcode('[shiftzoner_news_ticker]');
+}
+
